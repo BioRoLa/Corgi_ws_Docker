@@ -1,0 +1,6 @@
+[submodule "corgi_ros2_ws"]
+	path = corgi_ros2_ws
+	url = git@github.com:BioRoLa/corgi_ros2_ws.git
+[submodule "grpc_core"]
+	path = grpc_core
+	url = git@github.com:BioRoLa/grpc_core.git

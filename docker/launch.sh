@@ -29,12 +29,12 @@ DOCKER_RUN_OPTS=(
     -e NVIDIA_VISIBLE_DEVICES=all
     -e NVIDIA_DRIVER_CAPABILITIES=all
     -v /tmp/.X11-unix:/tmp/.X11-unix:rw
-    -v "$(pwd)/env_isolated_test/corgi_ws:/root/corgi_ws"
+    -v "$(pwd):/root/corgi_ws"
 )
 
 echo "🚀 Launching container: ${IMAGE_NAME}:${TAG} as '${CONTAINER_NAME}'"
 echo "Host directories mounted:"
-echo "  - $(pwd)/env_isolated_test/corgi_ws -> /root/corgi_ws"
+echo "  - $(pwd) -> /root/corgi_ws"
 
 # Get host user and group ID for the chown trap to fix file permissions on exit
 HOST_UID=$(id -u)
@@ -51,17 +51,20 @@ else
     INNER_COMMAND="zsh"
 fi
 
-# Run the container with the specified options and command
-docker run "${DOCKER_RUN_OPTS[@]}" "${IMAGE_NAME}:${TAG}" \
-    zsh -c "
-        trap 'echo \"Fixing permissions...\"; chown -R ${HOST_UID}:${HOST_GID} /root/corgi_ws' EXIT;
-        source /opt/ros/humble/setup.zsh;
-        # The workspace setup is also sourced from .zshrc, but we can be explicit.
-        if [ -f /root/corgi_ws/corgi_ros2_ws/install/setup.zsh ]; then
-            source /root/corgi_ws/corgi_ros2_ws/install/setup.zsh;
-        fi;
-        ${INNER_COMMAND}
-    "
+zsh -c "
+    trap 'echo \"Fixing permissions...\"; chown -R ${HOST_UID}:${HOST_GID} /root/corgi_ws' EXIT;
+    source /opt/ros/humble/setup.zsh;
+    
+    # 自動檢查並 Source 工作區環境
+    if [ -f /root/corgi_ws/corgi_ros2_ws/install/setup.zsh ]; then
+        source /root/corgi_ws/corgi_ros2_ws/install/setup.zsh;
+        echo '✅ Corgi ROS 2 workspace sourced.';
+    else
+        echo '⚠️ Warning: Workspace not built yet. Run colcon build first.';
+    fi
+    
+    ${INNER_COMMAND};
+"
 
 # Revoke X server access after the container closes
 echo "Container stopped. Revoking container access to X server..."

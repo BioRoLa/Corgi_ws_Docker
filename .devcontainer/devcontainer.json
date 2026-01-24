@@ -1,25 +1,66 @@
 {
-    "name": "Corgi System Development",
+    "name": "Corgi ROS 2 Development (Pack & Go)",
     "image": "starlee0514/corgi_ros2_pack_and_go:latest",
-    "runArgs": ["--gpus=all", "--net=host", "--privileged"],
-    "mounts": [
-        "source=/tmp/.X11-unix,target=/tmp/.X11-unix,type=bind",
-        // 修正：移除 readonly，或者保留 readonly 但不要在後端指令執行 git config
-        "source=${localEnv:HOME}/.gitconfig,target=/root/.gitconfig,type=bind"
+
+    // 啟動參數：對齊你的 launch.sh，包含 GPU 與 X11 支援
+    "runArgs": [
+        "--gpus=all",
+        "--net=host",
+        "--privileged",
+        "--name", "corgi_dev_container"
     ],
+
+    // 設置容器內的工作目錄
     "workspaceFolder": "/root/corgi_ws",
-    // 修正：移除 git config 指令，避免衝突
-    "postCreateCommand": "cd /root/corgi_ws/grpc_core && mkdir -p build && cd build && cmake .. -DCMAKE_INSTALL_PREFIX=/opt/corgi/install && make -j$(nproc) && make install && ldconfig",
-    
-    // 預裝 VS Code 插件
+
+    // 掛載設定
+    "mounts": [
+        // 1. 將目前的母倉庫掛載到容器內的 /root/corgi_ws
+        {
+            "source": "${localWorkspaceFolder}",
+            "target": "/root/corgi_ws",
+            "type": "bind"
+        },
+        // 2. 掛載 X11 Socket 以啟動 Webots 視窗
+        "source=/tmp/.X11-unix,target=/tmp/.X11-unix,type=bind",
+        // 3. 掛載 Git 設定 (保持唯讀以保護宿主機)
+        "source=${localEnv:HOME}/.gitconfig,target=/root/.gitconfig,type=bind,readonly"
+    ],
+
+    // 環境變數設定
+    "containerEnv": {
+        "DISPLAY": "${localEnv:DISPLAY}",
+        "NVIDIA_DRIVER_CAPABILITIES": "all",
+        "QT_X11_NO_MITSHM": "1",
+        // 解決 Git 安全目錄問題，避開 "Device or resource busy" 錯誤
+        "GIT_CONFIG_COUNT": "1",
+        "GIT_CONFIG_KEY_0": "safe.directory",
+        "GIT_CONFIG_VALUE_0": "*"
+    },
+
+    // 啟動後自動執行指令
+    // 包含：補抓子模組、編譯 grpc_core、連結系統庫
+    "postCreateCommand": "git submodule update --init --recursive && cd /root/corgi_ws/grpc_core && mkdir -p build && cd build && cmake .. -DCMAKE_INSTALL_PREFIX=/opt/corgi/install && make -j$(nproc) && make install && ldconfig",
+
+    // VS Code 介面與插件設定
     "customizations": {
         "vscode": {
+            "settings": {
+                // 強制預設 Terminal 使用 Zsh
+                "terminal.integrated.defaultProfile.linux": "zsh",
+                "ros.rosdistro": "humble",
+                "python.autoComplete.extraPaths": [
+                    "/opt/ros/humble/lib/python3.10/site-packages",
+                    "/root/corgi_ws/corgi_ros2_ws/install/setup.zsh"
+                ]
+            },
             "extensions": [
+                "ms-iot.vscode-ros",
                 "ms-vscode.cpptools",
                 "ms-python.python",
-                "ms-iot.vscode-ros",
                 "mhutchie.git-graph",
-                "christian-kohler.path-intellisense"
+                "christian-kohler.path-intellisense",
+                "twxs.cmake"
             ]
         }
     },

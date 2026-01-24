@@ -1,0 +1,28 @@
+{
+    "name": "Corgi ROS 2 Pack & Go",
+    "image": "starlee0514/corgi_ros2_pack_and_go:latest",
+    "runArgs": [
+        "--gpus=all",
+        "--net=host",
+        "--privileged",
+        "-e", "DISPLAY=${localEnv:DISPLAY}"
+    ],
+    "mounts": [
+        "source=/tmp/.X11-unix,target=/tmp/.X11-unix,type=bind",
+        "source=${localEnv:HOME}/.gitconfig,target=/root/.gitconfig,type=bind,readonly"
+    ],
+    "workspaceFolder": "/root/corgi_ws",
+    // 啟動後自動編譯 grpc_core，並讓 git 權限通過
+    "postCreateCommand": "git config --global --add safe.directory '*' && cd /root/corgi_ws/grpc_core && mkdir -p build && cd build && cmake .. -DCMAKE_INSTALL_PREFIX=/opt/corgi/install && make -j$(nproc) && make install && ldconfig",
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "ms-iot.vscode-ros",
+                "ms-vscode.cpptools",
+                "ms-python.python",
+                "mhutchie.git-graph"
+            ]
+        }
+    },
+    "remoteUser": "root"
+}

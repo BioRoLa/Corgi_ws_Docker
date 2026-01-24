@@ -22,48 +22,45 @@
             "type": "bind"
         },
         // 2. 掛載 X11 Socket 以啟動 Webots 視窗
-        "source=/tmp/.X11-unix,target=/tmp/.X11-unix,type=bind",
-        // 3. 掛載 Git 設定 (保持唯讀以保護宿主機)
-        "source=${localEnv:HOME}/.gitconfig,target=/root/.gitconfig,type=bind,readonly"
+        {
+            "source": "/tmp/.X11-unix",
+            "target": "/tmp/.X11-unix",
+            "type": "bind"
+        },
+        // // 3. 掛載 Xauthority 以支援 X11 應用程式
+        // {
+        //     "source": "${localEnv:HOME}/.Xauthority",
+        //     "target": "/root/.Xauthority",
+        //     "type": "bind"
+        // },
+        // 4. 掛載 Git 設定 (保持唯讀以保護宿主機)
+        {
+            "source": "${localEnv:HOME}/.gitconfig",
+            "target": "/root/.gitconfig",
+            "type": "bind"
+        }
     ],
 
     // 環境變數設定
     "containerEnv": {
-        "DISPLAY": "${localEnv:DISPLAY}",
+        "DISPLAY": ":0",
         "NVIDIA_DRIVER_CAPABILITIES": "all",
         "QT_X11_NO_MITSHM": "1",
         // 解決 Git 安全目錄問題，避開 "Device or resource busy" 錯誤
         "GIT_CONFIG_COUNT": "1",
         "GIT_CONFIG_KEY_0": "safe.directory",
-        "GIT_CONFIG_VALUE_0": "*"
+        "GIT_CONFIG_VALUE_0": "*",
+        "QT_QPA_PLATFORM": "xcb",
+        "QT_DEBUG_PLUGINS": "1"
     },
-
-    // 啟動後自動執行指令
-    // 包含：補抓子模組、編譯 grpc_core、連結系統庫
-    "postCreateCommand": "git submodule update --init --recursive && cd /root/corgi_ws/grpc_core && mkdir -p build && cd build && cmake .. -DCMAKE_INSTALL_PREFIX=/opt/corgi/install && make -j$(nproc) && make install && ldconfig",
-
-    // VS Code 介面與插件設定
+    // 只執行編譯，不執行會失敗的 git config
+    "postCreateCommand": "git config --system --add safe.directory '*' && cd /root/corgi_ws/grpc_core && mkdir -p build && cd build && cmake .. -DCMAKE_INSTALL_PREFIX=/opt/corgi/install && make -j$(nproc) && make install && ldconfig",
     "customizations": {
         "vscode": {
             "settings": {
-                // 強制預設 Terminal 使用 Zsh
-                "terminal.integrated.defaultProfile.linux": "zsh",
-                "ros.rosdistro": "humble",
-                "python.autoComplete.extraPaths": [
-                    "/opt/ros/humble/lib/python3.10/site-packages",
-                    "/root/corgi_ws/corgi_ros2_ws/install/setup.zsh"
-                ]
-            },
-            "extensions": [
-                "ms-iot.vscode-ros",
-                "ms-vscode.cpptools",
-                "ms-python.python",
-                "mhutchie.git-graph",
-                "christian-kohler.path-intellisense",
-                "twxs.cmake"
-            ]
+                "terminal.integrated.defaultProfile.linux": "zsh"
+            }
         }
     },
-
     "remoteUser": "root"
 }

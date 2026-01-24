@@ -39,13 +39,18 @@ cd corgi_ws
 1. Open the `corgi_ws` folder in VS Code.
 2. When prompted with **"Reopen in Container"**, click **Yes**.
 3. **Wait for Initialization**: The `postCreateCommand` will automatically:
-* Resolve Git "dubious ownership" permissions.
-* Compile `grpc_core` and install it to `/opt/corgi/install`.
-* Update system library links (`ldconfig`).
+    * Resolve Git "dubious ownership" permissions.
+    * Compile `grpc_core` and install it to `/opt/corgi/install`.
+    * Update system library links (`ldconfig`).
 
+### 3. Build
 
+Since environments were installed in different path, build with different command:
+```bash
+colcon build --cmake-args -DLOCAL_PACKAGE_PATH=/opt/corgi/install
+```
 
-### 3. Launch Simulation
+### 4. Launch Simulation
 
 Open the integrated terminal (defaulted to **Zsh**) and run:
 
@@ -105,6 +110,9 @@ git config --global --add safe.directory "*"
 ```
 
 ---
+## TODO
+
+ARM64 (Jetson Orin) capability unvertified
 
 ## 🖥️ Hardware Support
 

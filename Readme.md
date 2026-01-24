@@ -29,7 +29,7 @@ Using the **Dev Containers** extension in VS Code is the easiest way to get star
 You **must** use the `--recursive` flag to pull all nested submodules:
 
 ```bash
-git clone --recursive git@github.com:BioRoLa/corgi_ws.git
+git clone --recursive git@github.com:BioRoLa/Corgi_ws_-Docker_Version-.git
 cd corgi_ws
 
 ```

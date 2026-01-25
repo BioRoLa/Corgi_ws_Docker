@@ -30,14 +30,24 @@ You **must** use the `--recursive` flag to pull all nested submodules:
 
 ```bash
 git clone --recursive git@github.com:BioRoLa/Corgi_ws_-Docker_Version-.git
-cd corgi_ws
+cd Corgi_ws_-Docker_Version-
 
 ```
 
+### 1.1 (if you are not root user)
+
+If you are not the root user, you need to add user into docker group
+
+```bash
+sudo usermod-aG docker $USER
+newgrp docker
+```
+log out and login again to active change.
+
 ### 2. Open in Container
 
-1. Open the `corgi_ws` folder in VS Code.
-2. When prompted with **"Reopen in Container"**, click **Yes**.
+1. Open the `Corgi_ws_-Docker_Version-` folder in VS Code.
+2. When prompted with **"Reopen in Container"**, click **Yes**. (Make sure you have Dev container extension in VS Code)
 3. **Wait for Initialization**: The `postCreateCommand` will automatically:
     * Resolve Git "dubious ownership" permissions.
     * Compile `grpc_core` and install it to `/opt/corgi/install`.

@@ -73,19 +73,38 @@ ros2 launch corgi_sim corgi_webots.launch.py
 
 ## 🛠️ Manual Launch (Without VS Code)
 
-If you prefer using a standard terminal, use the provided script:
+If you prefer using a standard terminal, you can pull the pre-built image or build it locally.
+
+### 1. Prepare the Image
+
+**Option A: Pull from Docker Hub**
+```bash
+docker pull starlee0514/corgi_ros2_pack_and_go:latest
+# Tag the image so launch.sh can find it (launch.sh expects corgi_ros2_pack_and_go:YYYYMMDD)
+docker tag starlee0514/corgi_ros2_pack_and_go:latest corgi_ros2_pack_and_go:$(date +%Y%m%d)
+```
+
+**Option B: Build Locally**
+```bash
+./docker/build.sh
+```
+
+### 2. Launch Container
 
 ```bash
-# 1. Grant execution permissions
+# Grant execution permissions
 chmod +x docker/launch.sh
 
-# 2. Start and enter the container
+# Start and enter the container
+# Note: This script automatically compiles and installs grpc_core to /opt/corgi/install
 ./docker/launch.sh
+```
 
-# 3. Compile within the container
+### 3. Compile within the container
+
+```bash
 cd /root/corgi_ws/corgi_ros2_ws
-colcon build --symlink-install --cmake-args -DLOCAL_PACKAGE_PATH=/opt/corgi/install
-
+colcon build --cmake-args -DLOCAL_PACKAGE_PATH=/opt/corgi/install
 ```
 
 ---
@@ -112,7 +131,7 @@ xhost +local:docker
 
 ### Git Permission Errors
 
-If you see `fatal: detected dubious ownership`, this is expected when mounting host files into a root container. We have resolved this via environment variables in `devcontainer.json`. For manual runs, use:
+If you see `fatal: detected dubious ownership`, this is expected when mounting host files into a root container. We have resolved this via environment variables in `devcontainer.json` and automatically in `docker/launch.sh`. For other manual runs, use:
 
 ```bash
 git config --global --add safe.directory "*"

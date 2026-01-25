@@ -1,10 +1,14 @@
 #!/bin/bash
 
-# Get current date for the image tag in YYYYMMDD format
-TAG=$(date +%Y%m%d)
+# # Get current date for the image tag in YYYYMMDD format
+# TAG=$(date +%Y%m%d)
+
+# Use 'latest' tag by default
+TAG="latest"
+
 # Get the current user's name for naming the container
 USER_NAME=$(whoami)
-IMAGE_NAME="corgi_ros2_pack_and_go"
+IMAGE_NAME="starlee0514/corgi_ros2_pack_and_go"
 
 # Define the container name using the user's name
 CONTAINER_NAME="corgi_dev_${USER_NAME}"

@@ -2,8 +2,16 @@
 
 # Get current date for the image tag in YYYYMMDD format
 TAG=$(date +%Y%m%d)
+# Get the current user's name for naming the container
+USER_NAME=$(whoami)
 IMAGE_NAME="corgi_ros2_pack_and_go"
-CONTAINER_NAME="corgi_dev_${USER}"
+
+# Define the container name using the user's name
+CONTAINER_NAME="corgi_dev_${USER_NAME}"
+# Set ROS_DOMAIN_ID based on the user's UID to avoid conflicts
+export ROS_DOMAIN_ID=$(( $(id -u) % 230 ))
+
+echo "👤 User: ${USER_NAME} | 🆔 ROS_DOMAIN_ID: ${ROS_DOMAIN_ID}"
 
 # Allow the container to connect to the host's X server for GUI applications
 echo "Allowing container to access X server..."
@@ -25,6 +33,7 @@ DOCKER_RUN_OPTS=(
     --net=host
     --gpus all
     -e DISPLAY=$DISPLAY
+    -e ROS_DOMAIN_ID=${ROS_DOMAIN_ID}  # ROS_DOMAIN_ID for DDS communication
     -e TERM=xterm-256color
     -e NVIDIA_VISIBLE_DEVICES=all
     -e NVIDIA_DRIVER_CAPABILITIES=all
@@ -51,7 +60,7 @@ else
     INNER_COMMAND="zsh"
 fi
 
-zsh -c "
+docker run "${DOCKER_RUN_OPTS[@]}" "${IMAGE_NAME}:${TAG}" zsh -c "
     trap 'echo \"Fixing permissions...\"; chown -R ${HOST_UID}:${HOST_GID} /root/corgi_ws' EXIT;
     source /opt/ros/humble/setup.zsh;
     

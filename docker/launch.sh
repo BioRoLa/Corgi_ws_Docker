@@ -3,7 +3,7 @@
 # Get current date for the image tag in YYYYMMDD format
 TAG=$(date +%Y%m%d)
 IMAGE_NAME="corgi_ros2_pack_and_go"
-CONTAINER_NAME="corgi_dev"
+CONTAINER_NAME="corgi_dev_${USER}"
 
 # Allow the container to connect to the host's X server for GUI applications
 echo "Allowing container to access X server..."

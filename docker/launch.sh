@@ -62,6 +62,29 @@ fi
 
 docker run "${DOCKER_RUN_OPTS[@]}" "${IMAGE_NAME}:${TAG}" zsh -c "
     trap 'echo \"Fixing permissions...\"; chown -R ${HOST_UID}:${HOST_GID} /root/corgi_ws' EXIT;
+    
+    # Configure Git safe directory to avoid ownership issues
+    git config --global --add safe.directory \"*\"
+
+    # Compile and install grpc_core (Required for corgi_ros2_ws)
+    if [ -d /root/corgi_ws/grpc_core ]; then
+        echo \"🔧 Compiling and installing grpc_core...\"
+        # Create build directory if it doesn't exist
+        mkdir -p /root/corgi_ws/grpc_core/build
+        cd /root/corgi_ws/grpc_core/build
+        
+        # Configure, build, and install
+        # Redirect stdout to /dev/null to reduce noise, keep stderr
+        cmake .. -DCMAKE_INSTALL_PREFIX=/opt/corgi/install > /dev/null
+        make -j$(nproc) > /dev/null
+        make install > /dev/null
+        ldconfig
+        echo \"✅ grpc_core installed to /opt/corgi/install\"
+        cd /root/corgi_ws/corgi_ros2_ws
+    else
+        echo \"⚠️  Warning: grpc_core directory not found at /root/corgi_ws/grpc_core\"
+    fi
+
     source /opt/ros/humble/setup.zsh;
     
     # 自動檢查並 Source 工作區環境

@@ -7,7 +7,7 @@
         "--gpus=all",
         "--net=host",
         "--privileged",
-        "--name", "corgi_dev_container"
+        "--name", "corgi_dev_${localEnv:USER}"
     ],
 
     // 設置容器內的工作目錄

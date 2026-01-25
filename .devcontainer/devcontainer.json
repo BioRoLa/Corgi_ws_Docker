@@ -27,12 +27,6 @@
             "target": "/tmp/.X11-unix",
             "type": "bind"
         },
-        // // 3. 掛載 Xauthority 以支援 X11 應用程式
-        // {
-        //     "source": "${localEnv:HOME}/.Xauthority",
-        //     "target": "/root/.Xauthority",
-        //     "type": "bind"
-        // },
         // 4. 掛載 Git 設定 (保持唯讀以保護宿主機)
         {
             "source": "${localEnv:HOME}/.gitconfig",

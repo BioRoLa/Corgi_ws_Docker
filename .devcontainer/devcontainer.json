@@ -4,14 +4,16 @@
 
     // 啟動參數：對齊你的 launch.sh，包含 GPU 與 X11 支援
     "runArgs": [
-        "--gpus=all",
         "--net=host",
         "--privileged",
-        "--name", "corgi_dev_${localEnv:USER}"
+        "--name", "corgi_dev_${localEnv:USER}",
+        "--device", "/dev/nvidia0:/dev/nvidia0",
+        "--device", "/dev/nvidiactl:/dev/nvidiactl",
+        "--device", "/dev/nvidia-uvm:/dev/nvidia-uvm",
+        "--device", "/dev/nvidia-uvm-tools:/dev/nvidia-uvm-tools",
+        "--device", "/dev/nvidia-modeset:/dev/nvidia-modeset"
     ],
-
-    // 設置容器內的工作目錄
-    "workspaceFolder": "/root/corgi_ws",
+    "workspaceFolder": "/root/corgi_ws/corgi_ros2_ws",
 
     // 掛載設定
     "mounts": [
@@ -27,27 +29,32 @@
             "target": "/tmp/.X11-unix",
             "type": "bind"
         },
-        // 4. 掛載 Git 設定 (保持唯讀以保護宿主機)
+        // 3. 掛載 Git 設定 (保持唯讀以保護宿主機)
         {
             "source": "${localEnv:HOME}/.gitconfig",
             "target": "/root/.gitconfig",
             "type": "bind"
+        },
+        // 核心庫
+        {
+            "source": "/usr/lib/x86_64-linux-gnu",
+            "target": "/usr/lib/x86_64-linux-gnu",
+            "type": "bind"
+        },
+        {
+            "source": "/usr/share/glvnd",
+            "target": "/usr/share/glvnd",
+            "type": "bind"
         }
     ],
-
-    // 環境變數設定
     "containerEnv": {
-        "DISPLAY": ":0",
-        "NVIDIA_DRIVER_CAPABILITIES": "all",
+        "DISPLAY": "${localEnv:DISPLAY}",
+        "NVIDIA_DRIVER_CAPABILITIES": "all,graphics,display,utility",
+        "NVIDIA_VISIBLE_DEVICES": "all",
+        "__GLX_VENDOR_LIBRARY_NAME": "nvidia",
         "QT_X11_NO_MITSHM": "1",
-        // 解決 Git 安全目錄問題，避開 "Device or resource busy" 錯誤
-        "GIT_CONFIG_COUNT": "1",
-        "GIT_CONFIG_KEY_0": "safe.directory",
-        "GIT_CONFIG_VALUE_0": "*",
-        "QT_QPA_PLATFORM": "xcb",
-        "QT_DEBUG_PLUGINS": "1"
+        "LD_LIBRARY_PATH": "/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH"
     },
-    // 只執行編譯，不執行會失敗的 git config
     "postCreateCommand": "git config --system --add safe.directory '*' && cd /root/corgi_ws/grpc_core && mkdir -p build && cd build && cmake .. -DCMAKE_INSTALL_PREFIX=/opt/corgi/install && make -j$(nproc) && make install && ldconfig",
     "customizations": {
         "vscode": {

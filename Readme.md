@@ -65,7 +65,7 @@ colcon build --cmake-args -DLOCAL_PACKAGE_PATH=/opt/corgi/install
 Open the integrated terminal (defaulted to **Zsh**) and run:
 
 ```zsh
-ros2 launch corgi_sim corgi_webots.launch.py
+ros2 launch corgi_sim Corgi_launch.py
 
 ```
 

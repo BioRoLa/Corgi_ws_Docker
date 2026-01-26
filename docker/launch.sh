@@ -29,13 +29,45 @@ if [ "$(docker ps -q -f name=^/${CONTAINER_NAME}$)" ]; then
     exit 1
 fi
 
+# 動態檢測 GPU 支援模式
+GPU_RUN_ARGS=""
+if docker run --rm --gpus all nvidia/cuda:12.0-base nvidia-smi > /dev/null 2>&1; then
+    # 模式 A: 標準 Toolkit 模式 (適用於大多數正常機器)
+    GPU_RUN_ARGS="--gpus all"
+    echo "✅ 偵測到標準 NVIDIA Toolkit，使用標準 GPU 支援。"
+else
+    # 模式 B: 手動映射模式 (專門對付 RTX 5080 或權限死鎖環境)
+    echo "⚠️  標準 GPU 模式失敗，嘗試啟用「手動映射」補丁..."
+    
+    # 自動尋找宿主機驅動庫路徑 (處理不同版本的 .so 檔案)
+    LIB_ML=$(find /usr/lib/x86_64-linux-gnu -name "libnvidia-ml.so.1" | head -n 1)
+    LIB_CUDA=$(find /usr/lib/x86_64-linux-gnu -name "libcuda.so.1" | head -n 1)
+    
+    if [ -n "$LIB_ML" ] && [ -n "$LIB_CUDA" ]; then
+        GPU_RUN_ARGS="
+            --device /dev/nvidia0:/dev/nvidia0
+            --device /dev/nvidiactl:/dev/nvidiactl
+            --device /dev/nvidia-uvm:/dev/nvidia-uvm
+            --device /dev/nvidia-uvm-tools:/dev/nvidia-uvm-tools
+            --device /dev/nvidia-modeset:/dev/nvidia-modeset
+            -v /usr/bin/nvidia-smi:/usr/bin/nvidia-smi
+            -v ${LIB_ML}:${LIB_ML}
+            -v ${LIB_CUDA}:${LIB_CUDA}
+            -e NVIDIA_VISIBLE_DEVICES=all
+            -e NVIDIA_DRIVER_CAPABILITIES=all"
+        echo "✅ 手動映射補丁已載入 (RTX 5080 模式)。"
+    else
+        echo "❌ 找不到宿主機驅動庫，將以無 GPU 模式啟動。"
+    fi
+fi
+
 # Define Docker run options, mirroring your zsh function
 DOCKER_RUN_OPTS=(
     -it --rm
     --name "${CONTAINER_NAME}"
     --privileged
     --net=host
-    --gpus all
+    ${GPU_RUN_ARGS}  # 這裡會根據環境動態填入參數
     -e DISPLAY=$DISPLAY
     -e ROS_DOMAIN_ID=${ROS_DOMAIN_ID}  # ROS_DOMAIN_ID for DDS communication
     -e TERM=xterm-256color

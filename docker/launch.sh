@@ -31,7 +31,7 @@ fi
 
 # 動態檢測 GPU 支援模式
 GPU_RUN_ARGS=""
-if docker run --rm --gpus all nvidia/cuda:12.0-base nvidia-smi > /dev/null 2>&1; then
+if docker run --rm --gpus all nvidia/cuda:12.8.1-base-ubuntu22.04 nvidia-smi > /dev/null 2>&1; then
     # 模式 A: 標準 Toolkit 模式 (適用於大多數正常機器)
     GPU_RUN_ARGS="--gpus all"
     echo "✅ 偵測到標準 NVIDIA Toolkit，使用標準 GPU 支援。"

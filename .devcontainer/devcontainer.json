@@ -10,7 +10,7 @@
         "corgi_dev_${localEnv:USER}"
     ],
     // 設置容器內的工作目錄
-    "workspaceFolder": "/root/corgi_ws/corgi_ros2_ws",
+    "workspaceFolder": "/root/corgi_ws",
     // 掛載設定
     "mounts": [
         // 1. 將目前的母倉庫掛載到容器內的 /root/corgi_ws

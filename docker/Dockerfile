@@ -130,11 +130,74 @@ RUN wget https://github.com/cyberbotics/webots/releases/download/R2025a/webots_2
     rm -rf /var/lib/apt/lists/*
 
 # ===================================================================
+# 安裝額外的 Colcon 和 ROS 工具包
+# ===================================================================
+RUN apt-get update && apt-get install -y \
+    # Colcon extensions and tools
+    python3-colcon-mixin \
+    python3-colcon-metadata \
+    python3-colcon-argcomplete \
+    python3-colcon-clean \
+    # ROS 2 build and development tools
+    ros-humble-ament-cmake \
+    ros-humble-ament-cmake-ros \
+    ros-humble-ament-lint-auto \
+    # ROS 2 launch and testing
+    ros-humble-launch \
+    ros-humble-launch-testing \
+    ros-humble-launch-testing-ros \
+    # ROS 2 standard packages
+    ros-humble-ros2-control \
+    ros-humble-ros2-controllers \
+    ros-humble-tf2-ros \
+    ros-humble-geometry-msgs \
+    ros-humble-std-msgs \
+    ros-humble-sensor-msgs \
+    # ROS development utilities
+    python3-rosdep \
+    python3-vcstool \
+    python3-osrf-pycommon \
+    # Additional development tools
+    clang-format \
+    clang-tools \
+    gdb \
+    valgrind \
+    ccache \
+    ninja-build \
+    doxygen \
+    graphviz \
+    # System utilities
+    htop \
+    tmux \
+    tree \
+    curl \
+    jq \
+    lsof \
+    strace \
+    unzip \
+    rsync \
+    net-tools \
+    iputils-ping \
+    vim \
+    nano \
+    && rm -rf /var/lib/apt/lists/*
+    
+# ===================================================================
 # 配置 Zsh 環境與最終設定
 # ===================================================================
-# 配置 .zshrc
+# 複製別名文件到容器
+COPY docker/aliases.sh /root/.aliases.sh
+RUN chmod +x /root/.aliases.sh
+
+# 配置 .zshrc 並載入別名
 RUN sed -i 's/plugins=(git)/plugins=(git zsh-autosuggestions zsh-syntax-highlighting)/' ~/.zshrc \
-    && echo "\n# ROS & Corgi Environment" >> ~/.zshrc \
+    && echo "\n# Load Custom Aliases" >> ~/.zshrc \
+    && echo "if [ -f ~/.aliases.sh ]; then" >> ~/.zshrc \
+    && echo "    source ~/.aliases.sh" >> ~/.zshrc \
+    && echo "fi" >> ~/.zshrc
+
+# 配置 ROS、環境變數與路徑
+RUN echo "\n# ROS & Corgi Environment" >> ~/.zshrc \
     && echo "source /opt/ros/humble/setup.zsh" >> ~/.zshrc \
     && echo "source ${CORGI_WS}/corgi_ros2_ws/install/setup.zsh" >> ~/.zshrc \
     && echo "\n# Dependent Libraries Path" >> ~/.zshrc \

@@ -1,10 +1,6 @@
-This `README.md` is designed to be professional and clear, specifically addressing the **Submodule architecture**, **Docker environment**, and **VS Code Dev Container** automation we've set up.
-
----
-
 # Corgi ROS 2 Project (Docker Pack & Go)
 
-This repository contains the integrated development environment and source code for the Corgi quadruped robot, based on **ROS 2 Humble**. It utilizes **Docker** and **Git Submodules** to ensure environment consistency across different platforms (PC, Jetson Orin).
+This repository provides the development environment and source code for the Corgi quadruped robot, based on **ROS 2 Humble**. It uses **Docker** and **Git Submodules** to keep environments consistent across platforms (PC, Jetson Orin).
 
 ## 📂 Repository Structure
 
@@ -22,11 +18,11 @@ corgi_ws (Parent Repo)
 
 ## 🚀 Quick Start (Recommended: VS Code)
 
-Using the **Dev Containers** extension in VS Code is the easiest way to get started as it automates gRPC compilation and environment sourcing.
+Using the **Dev Containers** extension in VS Code is the easiest way to get started because it automates gRPC compilation and environment sourcing.
 
 ### 1. Clone the Repository
 
-You **must** use the `--recursive` flag to pull all nested submodules:
+Use `--recursive` to pull all nested submodules:
 
 ```bash
 git clone --recursive git@github.com:BioRoLa/Corgi_ws_-Docker_Version-.git
@@ -36,26 +32,26 @@ cd Corgi_ws_-Docker_Version-
 
 ### 1.1 (if you are not root user)
 
-If you are not the root user, you need to add user into docker group
+If you are not the root user, add your user to the docker group:
 
 ```bash
-sudo usermod-aG docker $USER
+sudo usermod -aG docker $USER
 newgrp docker
 ```
-log out and login again to active change.
+Log out and log back in to apply the change.
 
 ### 2. Open in Container
 
 1. Open the `Corgi_ws_-Docker_Version-` folder in VS Code.
-2. When prompted with **"Reopen in Container"**, click **Yes**. (Make sure you have Dev container extension in VS Code)
-3. **Wait for Initialization**: The `postCreateCommand` will automatically:
+2. When prompted with **"Reopen in Container"**, click **Yes**. (Ensure the Dev Containers extension is installed.)
+3. **Wait for initialization**: The `postCreateCommand` will automatically:
     * Resolve Git "dubious ownership" permissions.
     * Compile `grpc_core` and install it to `/opt/corgi/install`.
     * Update system library links (`ldconfig`).
 
 ### 3. Build
 
-Since environments were installed in different path, build with different command:
+Because dependencies are installed in a separate path, build with:
 ```bash
 colcon build --cmake-args -DLOCAL_PACKAGE_PATH=/opt/corgi/install
 ```
@@ -73,21 +69,23 @@ ros2 launch corgi_sim Corgi_launch.py
 
 ## 🛠️ Manual Launch (Without VS Code)
 
-If you prefer using a standard terminal, you can pull the pre-built image or build it locally.
+If you prefer a standard terminal, you can pull the pre-built image or build it locally.
 
 ### 1. Prepare the Image
 
 **Option A: Pull from Docker Hub**
 ```bash
 docker pull starlee0514/corgi_ros2_pack_and_go:latest
-# Tag the image so launch.sh can find it (launch.sh expects corgi_ros2_pack_and_go:YYYYMMDD)
-docker tag starlee0514/corgi_ros2_pack_and_go:latest corgi_ros2_pack_and_go:$(date +%Y%m%d)
 ```
 
 **Option B: Build Locally**
 ```bash
 ./docker/build.sh
 ```
+
+**Notes**
+- `build.sh` automatically retags the built image as `corgi_ros2_pack_and_go:latest`.
+- `launch.sh` uses the `latest` tag by default.
 
 ### 2. Launch Container
 
@@ -99,6 +97,8 @@ chmod +x docker/launch.sh
 # Note: This script automatically compiles and installs grpc_core to /opt/corgi/install
 ./docker/launch.sh
 ```
+> For multiple terminals, run `launch.sh` again to attach to the existing container (created by VS Code or a previous launch).
+> To attach from VS Code, press Ctrl+Shift+P and choose **Dev Containers: Attach to Running Container**.
 
 ### 3. Compile within the container
 
@@ -113,7 +113,7 @@ colcon build --cmake-args -DLOCAL_PACKAGE_PATH=/opt/corgi/install
 
 ### Submodule Synchronization
 
-If you find sub-folders are empty after a `git pull`, sync them manually on your **Host** machine:
+If subfolders are empty after `git pull`, sync them manually on your **host** machine:
 
 ```bash
 git submodule update --init --recursive
@@ -122,7 +122,7 @@ git submodule update --init --recursive
 
 ### GUI & Display (Webots/RViz)
 
-This setup supports X11 Forwarding. If the Webots window fails to appear, run this on your **Host** machine:
+This setup supports X11 forwarding. If the Webots window fails to appear, run this on your **host** machine:
 
 ```bash
 xhost +local:docker
@@ -131,17 +131,30 @@ xhost +local:docker
 
 ### Git Permission Errors
 
-If you see `fatal: detected dubious ownership`, this is expected when mounting host files into a root container. We have resolved this via environment variables in `devcontainer.json` and automatically in `docker/launch.sh`. For other manual runs, use:
+If you see `fatal: detected dubious ownership`, this is expected when mounting host files into a root container. This is handled via environment variables in `devcontainer.json` and `docker/launch.sh`. For manual runs, use:
 
 ```bash
 git config --global --add safe.directory "*"
 
 ```
 
+### Aliases & Developer Convenience
+
+- Default aliases are in `docker/aliases.sh` and load automatically.
+- If a host-side `docker/aliases.sh` exists, `launch.sh` will mount it and override the container default.
+- Inside the container, run `show-aliases` to print all available shortcuts.
+
+### SSH & Git Config Mounts
+
+When using `docker/launch.sh`, these host files are mounted read-only if present:
+
+- `~/.ssh` → `/root/.ssh` (for GitHub SSH access)
+- `~/.gitconfig` → `/root/.gitconfig` (for Git user settings)
+
 ---
 ## TODO
 
-ARM64 (Jetson Orin) capability unvertified
+ARM64 (Jetson Orin) capability is unverified.
 
 ## 🖥️ Hardware Support
 

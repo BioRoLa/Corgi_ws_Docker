@@ -113,6 +113,12 @@ if [ -f "${SCRIPT_DIR}/aliases.sh" ]; then
     DOCKER_RUN_OPTS+=(-v "${SCRIPT_DIR}/aliases.sh:/root/.aliases.sh")
 fi
 
+# Check if host has SSH keys and mount them read-only
+if [ -d "$HOME/.ssh" ] && [ -f "$HOME/.ssh/id_ed25519" -o -f "$HOME/.ssh/id_rsa" ]; then
+    echo "🔑 SSH keys found in host. Mounting ~/.ssh into container (read-only)..."
+    DOCKER_RUN_OPTS+=(-v "$HOME/.ssh:/root/.ssh:ro")
+fi
+
 echo "🚀 Launching container: ${IMAGE_NAME}:${TAG} as '${CONTAINER_NAME}'"
 echo "Host directories mounted:"
 echo "  - $(pwd) -> /root/corgi_ws"

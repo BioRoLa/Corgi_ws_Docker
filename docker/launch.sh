@@ -3,6 +3,9 @@
 # # Get current date for the image tag in YYYYMMDD format
 # TAG=$(date +%Y%m%d)
 
+# Get the directory where this script is located
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]:-$0}" )" && pwd )"
+
 # Use 'latest' tag by default
 TAG="latest"
 
@@ -104,6 +107,12 @@ DOCKER_RUN_OPTS=(
     -v "$(pwd):/root/corgi_ws"
 )
 
+# Check if host has custom aliases.sh in same directory as this script and mount it to override container's default
+if [ -f "${SCRIPT_DIR}/aliases.sh" ]; then
+    echo "📝 Custom aliases.sh found in $(dirname ${SCRIPT_DIR}). Mounting to override container's default..."
+    DOCKER_RUN_OPTS+=(-v "${SCRIPT_DIR}/aliases.sh:/root/.aliases.sh")
+fi
+
 echo "🚀 Launching container: ${IMAGE_NAME}:${TAG} as '${CONTAINER_NAME}'"
 echo "Host directories mounted:"
 echo "  - $(pwd) -> /root/corgi_ws"
@@ -156,6 +165,12 @@ docker run "${DOCKER_RUN_OPTS[@]}" "${IMAGE_NAME}:${TAG}" zsh -c "
         echo '✅ Corgi ROS 2 workspace sourced.';
     else
         echo '⚠️ Warning: Workspace not built yet. Run colcon build first.';
+    fi
+    
+    # Load custom aliases if available
+    if [ -f ~/.aliases.sh ]; then
+        source ~/.aliases.sh;
+        echo '✅ Custom aliases loaded.';
     fi
     
     ${INNER_COMMAND};

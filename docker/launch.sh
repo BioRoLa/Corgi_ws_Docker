@@ -101,6 +101,9 @@ DOCKER_RUN_OPTS=(
     -e DISPLAY=$DISPLAY
     -e ROS_DOMAIN_ID=${ROS_DOMAIN_ID}  # ROS_DOMAIN_ID for DDS communication
     -e TERM=xterm-256color
+    -e GIT_CONFIG_COUNT=1
+    -e GIT_CONFIG_KEY_0=safe.directory
+    -e GIT_CONFIG_VALUE_0='*'
     -e NVIDIA_VISIBLE_DEVICES=all
     -e NVIDIA_DRIVER_CAPABILITIES=all
     -v /tmp/.X11-unix:/tmp/.X11-unix:rw
@@ -142,7 +145,27 @@ docker run "${DOCKER_RUN_OPTS[@]}" "${IMAGE_NAME}:${TAG}" zsh -c "
     trap 'echo \"Fixing permissions...\"; chown -R ${HOST_UID}:${HOST_GID} /root/corgi_ws' EXIT;
     
     # Configure Git safe directory to avoid ownership issues
-    git config --global --add safe.directory \"*\"
+    if [ -w /root/.gitconfig ] || [ ! -e /root/.gitconfig ]; then
+        git config --global --add safe.directory \"*\"
+    else
+        echo \"⚠️  /root/.gitconfig is read-only. Skipping git config update.\"
+    fi
+
+    # Ensure local git identity is set (use global if available)
+    if [ -d /root/corgi_ws/.git ]; then
+        if ! git -C /root/corgi_ws config user.name > /dev/null; then
+            GIT_USER_NAME=$(git config --global --get user.name)
+            if [ -n \"${GIT_USER_NAME}\" ]; then
+                git -C /root/corgi_ws config user.name \"${GIT_USER_NAME}\"
+            fi
+        fi
+        if ! git -C /root/corgi_ws config user.email > /dev/null; then
+            GIT_USER_EMAIL=$(git config --global --get user.email)
+            if [ -n \"${GIT_USER_EMAIL}\" ]; then
+                git -C /root/corgi_ws config user.email \"${GIT_USER_EMAIL}\"
+            fi
+        fi
+    fi
 
     # Compile and install grpc_core (Required for corgi_ros2_ws)
     if [ -d /root/corgi_ws/grpc_core ]; then

@@ -16,6 +16,17 @@ corgi_ws (Parent Repo)
 
 ---
 
+## 🎯 Getting Started
+
+This guide provides two methods to set up the Docker environment:
+
+1. **VS Code Dev Containers** — Automatic setup with full IDE integration
+2. **Manual `launch.sh`** — Terminal-based control with custom configuration (e.g., custom aliases in `./docker/aliases.sh`)
+
+Both methods pull the image from Docker Hub and can coexist. **Recommended:** Start the container with `launch.sh` and attach from VS Code for flexibility.
+
+---
+
 ## 🚀 Quick Start (Recommended: VS Code)
 
 Using the **Dev Containers** extension in VS Code is the easiest way to get started because it automates gRPC compilation and environment sourcing.
@@ -106,6 +117,19 @@ chmod +x docker/launch.sh
 cd /root/corgi_ws/corgi_ros2_ws
 colcon build --cmake-args -DLOCAL_PACKAGE_PATH=/opt/corgi/install
 ```
+
+---
+
+## ✅ VS Code vs Manual (Quick Comparison)
+
+| Topic | VS Code Dev Container | Manual `launch.sh` |
+| --- | --- | --- |
+| Setup | Automatic | Manual command |
+| gRPC build | Auto via `postCreateCommand` | Auto inside `launch.sh` |
+| Aliases | Uses image defaults | Can override with `docker/aliases.sh` |
+| Git/SSH | Devcontainer settings | Mounts `~/.ssh` and `~/.gitconfig` if present |
+| Multi‑terminal | VS Code terminals | Re-run `launch.sh` to attach |
+| Best for | Full IDE workflow | Terminal-only workflow |
 
 ---
 

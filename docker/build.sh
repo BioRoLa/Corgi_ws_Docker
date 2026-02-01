@@ -24,7 +24,7 @@ docker build \
     "$WORKSPACE_ROOT" 2>&1 | tee -a "$LOG_FILE"
 
 # Retag as latest
-docker tag "$IMAGE_NAME:$TAG" "$IMAGE_NAME:latest" 2>&1 | tee -a "$LOG_FILE"
+docker tag "${IMAGE_NAME}:${TAG}" "${IMAGE_NAME}:latest" 2>&1 | tee -a "$LOG_FILE"
 
-echo "Build complete. Image: $IMAGE_NAME:$TAG" | tee -a "$LOG_FILE"
-echo "Retagged as: $IMAGE_NAME:latest" | tee -a "$LOG_FILE"
+echo "Build complete. Image: ${IMAGE_NAME}:${TAG}" | tee -a "$LOG_FILE"
+echo "Retagged as: ${IMAGE_NAME}:latest" | tee -a "$LOG_FILE"

@@ -21,41 +21,68 @@ echo "👤 User: ${USER_NAME} | 🆔 ROS_DOMAIN_ID: ${ROS_DOMAIN_ID}"
 echo "Allowing container to access X server..."
 xhost +local:docker > /dev/null
 
-# Check if a container with the same name is already running to avoid conflicts
+# Check if a container with the same name is already running
 if [ "$(docker ps -q -f name=^/${CONTAINER_NAME}$)" ]; then
-    echo "Error: A container named '${CONTAINER_NAME}' is already running."
-    echo "You can attach to it using: docker exec -it ${CONTAINER_NAME} zsh"
+    echo "⚠️  Container '${CONTAINER_NAME}' is already running. Joining..."
     xhost -local:docker > /dev/null
-    exit 1
+    if [ $# -gt 0 ]; then
+        docker exec -it "${CONTAINER_NAME}" zsh -c "exec \"$@\""
+    else
+        docker exec -it "${CONTAINER_NAME}" zsh
+    fi
+    exit 0
 fi
 
 # 動態檢測 GPU 支援模式
-GPU_RUN_ARGS=""
-if docker run --rm --gpus all nvidia/cuda:12.8.1-base-ubuntu22.04 nvidia-smi > /dev/null 2>&1; then
-    # 模式 A: 標準 Toolkit 模式 (適用於大多數正常機器)
-    GPU_RUN_ARGS="--gpus all"
-    echo "✅ 偵測到標準 NVIDIA Toolkit，使用標準 GPU 支援。"
+GPU_RUN_ARGS=()
+# 可用環境變數覆蓋檢測用的 CUDA 映像
+if [ -n "${CUDA_CHECK_IMAGE}" ]; then
+    CUDA_CHECK_IMAGE="${CUDA_CHECK_IMAGE}"
 else
-    # 模式 B: 手動映射模式 (專門對付 RTX 5080 或權限死鎖環境)
-    echo "⚠️  標準 GPU 模式失敗，嘗試啟用「手動映射」補丁..."
+    # 優先使用本機已存在的 nvidia/cuda 映像，避免自動拉取最新版本
+    LOCAL_CUDA_IMAGE=$(docker images --format '{{.Repository}}:{{.Tag}}' | grep -E '^nvidia/cuda:' | head -n 1)
+    if [ -n "${LOCAL_CUDA_IMAGE}" ]; then
+        CUDA_CHECK_IMAGE="${LOCAL_CUDA_IMAGE}"
+    else
+        CUDA_CHECK_IMAGE="nvidia/cuda:latest"
+    fi
+fi
+
+# 檢查 docker 是否支援 --gpus 旗標
+if docker run --help | grep -q -- '--gpus'; then
+    if docker run --rm --gpus all "${CUDA_CHECK_IMAGE}" nvidia-smi > /dev/null 2>&1; then
+        # 模式 A: 標準 Toolkit 模式 (適用於大多數正常機器)
+        GPU_RUN_ARGS=(--gpus all)
+        echo "✅ 偵測到標準 NVIDIA Toolkit，使用標準 GPU 支援。 (${CUDA_CHECK_IMAGE})"
+    else
+        # 模式 B: 手動映射模式 (專門對付 RTX 5080 或權限死鎖環境)
+        echo "⚠️  標準 GPU 模式失敗，嘗試啟用「手動映射」補丁..."
+    fi
+else
+    # 沒有 --gpus 旗標的 Docker，直接走手動映射
+    echo "⚠️  Docker 不支援 --gpus，嘗試啟用「手動映射」補丁..."
+fi
+
+if [ -z "${GPU_RUN_ARGS}" ]; then
     
     # 自動尋找宿主機驅動庫路徑 (處理不同版本的 .so 檔案)
     LIB_ML=$(find /usr/lib/x86_64-linux-gnu -name "libnvidia-ml.so.1" | head -n 1)
     LIB_CUDA=$(find /usr/lib/x86_64-linux-gnu -name "libcuda.so.1" | head -n 1)
     
     if [ -n "$LIB_ML" ] && [ -n "$LIB_CUDA" ]; then
-        GPU_RUN_ARGS="
+        GPU_RUN_ARGS=(
             --device /dev/nvidia0:/dev/nvidia0
             --device /dev/nvidiactl:/dev/nvidiactl
             --device /dev/nvidia-uvm:/dev/nvidia-uvm
             --device /dev/nvidia-uvm-tools:/dev/nvidia-uvm-tools
             --device /dev/nvidia-modeset:/dev/nvidia-modeset
             -v /usr/bin/nvidia-smi:/usr/bin/nvidia-smi
-            -v ${LIB_ML}:${LIB_ML}
-            -v ${LIB_CUDA}:${LIB_CUDA}
+            -v "${LIB_ML}:${LIB_ML}"
+            -v "${LIB_CUDA}:${LIB_CUDA}"
             -e NVIDIA_VISIBLE_DEVICES=all
-            -e NVIDIA_DRIVER_CAPABILITIES=all"
-        echo "✅ 手動映射補丁已載入 (RTX 5080 模式)。"
+            -e NVIDIA_DRIVER_CAPABILITIES=all
+        )
+        echo "✅ 手動映射補丁已載入 。"
     else
         echo "❌ 找不到宿主機驅動庫，將以無 GPU 模式啟動。"
     fi
@@ -67,7 +94,7 @@ DOCKER_RUN_OPTS=(
     --name "${CONTAINER_NAME}"
     --privileged
     --net=host
-    ${GPU_RUN_ARGS}  # 這裡會根據環境動態填入參數
+    ${GPU_RUN_ARGS[@]}  # 這裡會根據環境動態填入參數
     -e DISPLAY=$DISPLAY
     -e ROS_DOMAIN_ID=${ROS_DOMAIN_ID}  # ROS_DOMAIN_ID for DDS communication
     -e TERM=xterm-256color

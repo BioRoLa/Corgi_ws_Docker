@@ -183,7 +183,7 @@ ARM64 (Jetson Orin) capability is unverified.
 ## 🖥️ Hardware Support
 
 * **Architecture**: x86_64 (PC) and ARM64 (Jetson Orin).
-* **GPU**: Full NVIDIA GPU acceleration via `nvidia-container-toolkit`.
+* **GPU**: NVIDIA (`nvidia-container-toolkit`) and AMD (`/dev/kfd` + `/dev/dri`) via auto-detection in `docker/launch.sh`.
 * **Sensors**: Pre-configured for IMU, Legged Odometry, and Webots simulation interfaces.
 
 ---

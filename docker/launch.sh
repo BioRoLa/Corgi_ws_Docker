@@ -29,9 +29,24 @@ export ROS_DOMAIN_ID=$(( $(id -u) % 230 ))
 
 echo "👤 User: ${USER_NAME} | 🆔 ROS_DOMAIN_ID: ${ROS_DOMAIN_ID}"
 
+# Preflight: ensure current user can talk to Docker daemon before any side effects.
+if ! docker info > /dev/null 2>&1; then
+    echo "❌ Cannot access Docker daemon (permission denied or daemon not running)."
+    echo ""
+    echo "Try these host-side fixes:"
+    echo "  1) Start Docker daemon: sudo systemctl start docker"
+    echo "  2) Add current user to docker group: sudo usermod -aG docker ${USER_NAME}"
+    echo "  3) Re-login (or run: newgrp docker) and try again"
+    echo ""
+    echo "Quick workaround (single run): sudo ./docker/launch.sh"
+    exit 1
+fi
+
 # Allow the container to connect to the host's X server for GUI applications
-echo "Allowing container to access X server..."
-xhost +local:docker > /dev/null
+if [ -n "${DISPLAY}" ] && command -v xhost > /dev/null 2>&1; then
+    echo "Allowing container to access X server..."
+    xhost +local:docker > /dev/null
+fi
 
 # Check if a container with the same name is already running
 if [ "$(docker ps -q -f name=^/${CONTAINER_NAME}$)" ]; then
@@ -45,59 +60,92 @@ if [ "$(docker ps -q -f name=^/${CONTAINER_NAME}$)" ]; then
     exit 0
 fi
 
-# 動態檢測 GPU 支援模式
+# 動態檢測 GPU 支援模式 (NVIDIA / AMD)
 GPU_RUN_ARGS=()
-# 可用環境變數覆蓋檢測用的 CUDA 映像
-if [ -n "${CUDA_CHECK_IMAGE}" ]; then
-    CUDA_CHECK_IMAGE="${CUDA_CHECK_IMAGE}"
-else
-    # 優先使用本機已存在的 nvidia/cuda 映像，避免自動拉取最新版本
-    LOCAL_CUDA_IMAGE=$(docker images --format '{{.Repository}}:{{.Tag}}' | grep -E '^nvidia/cuda:' | head -n 1)
-    if [ -n "${LOCAL_CUDA_IMAGE}" ]; then
-        CUDA_CHECK_IMAGE="${LOCAL_CUDA_IMAGE}"
-    else
-        CUDA_CHECK_IMAGE="nvidia/cuda:latest"
-    fi
+GPU_ENV_ARGS=()
+GPU_VENDOR="none"
+
+if ls /dev/nvidia* > /dev/null 2>&1; then
+    GPU_VENDOR="nvidia"
+elif [ -e /dev/kfd ] || ls /dev/dri/renderD* > /dev/null 2>&1; then
+    GPU_VENDOR="amd"
 fi
 
-# 檢查 docker 是否支援 --gpus 旗標
-if docker run --help | grep -q -- '--gpus'; then
-    if docker run --rm --gpus all "${CUDA_CHECK_IMAGE}" nvidia-smi > /dev/null 2>&1; then
-        # 模式 A: 標準 Toolkit 模式 (適用於大多數正常機器)
-        GPU_RUN_ARGS=(--gpus all)
-        echo "✅ 偵測到標準 NVIDIA Toolkit，使用標準 GPU 支援。 (${CUDA_CHECK_IMAGE})"
+if [ "${GPU_VENDOR}" = "nvidia" ]; then
+    # 可用環境變數覆蓋檢測用的 CUDA 映像
+    if [ -n "${CUDA_CHECK_IMAGE}" ]; then
+        CUDA_CHECK_IMAGE="${CUDA_CHECK_IMAGE}"
     else
-        # 模式 B: 手動映射模式 (專門對付 RTX 5080 或權限死鎖環境)
-        echo "⚠️  標準 GPU 模式失敗，嘗試啟用「手動映射」補丁..."
+        # 優先使用本機已存在的 nvidia/cuda 映像，避免自動拉取最新版本
+        LOCAL_CUDA_IMAGE=$(docker images --format '{{.Repository}}:{{.Tag}}' | grep -E '^nvidia/cuda:' | head -n 1)
+        if [ -n "${LOCAL_CUDA_IMAGE}" ]; then
+            CUDA_CHECK_IMAGE="${LOCAL_CUDA_IMAGE}"
+        else
+            CUDA_CHECK_IMAGE="nvidia/cuda:latest"
+        fi
     fi
-else
-    # 沒有 --gpus 旗標的 Docker，直接走手動映射
-    echo "⚠️  Docker 不支援 --gpus，嘗試啟用「手動映射」補丁..."
-fi
 
-if [ ${#GPU_RUN_ARGS[@]} -eq 0 ]; then
-    
-    # 自動尋找宿主機驅動庫路徑 (處理不同版本的 .so 檔案)
-    LIB_ML=$(find /usr/lib/x86_64-linux-gnu -name "libnvidia-ml.so.1" | head -n 1)
-    LIB_CUDA=$(find /usr/lib/x86_64-linux-gnu -name "libcuda.so.1" | head -n 1)
-    
-    if [ -n "$LIB_ML" ] && [ -n "$LIB_CUDA" ]; then
-        GPU_RUN_ARGS=(
-            --device /dev/nvidia0:/dev/nvidia0
-            --device /dev/nvidiactl:/dev/nvidiactl
-            --device /dev/nvidia-uvm:/dev/nvidia-uvm
-            --device /dev/nvidia-uvm-tools:/dev/nvidia-uvm-tools
-            --device /dev/nvidia-modeset:/dev/nvidia-modeset
-            -v /usr/bin/nvidia-smi:/usr/bin/nvidia-smi
-            -v "${LIB_ML}:${LIB_ML}"
-            -v "${LIB_CUDA}:${LIB_CUDA}"
+    # 檢查 docker 是否支援 --gpus 旗標
+    if docker run --help | grep -q -- '--gpus'; then
+        if docker run --rm --gpus all "${CUDA_CHECK_IMAGE}" nvidia-smi > /dev/null 2>&1; then
+            # 模式 A: 標準 Toolkit 模式
+            GPU_RUN_ARGS=(--gpus all)
+            echo "✅ 偵測到標準 NVIDIA Toolkit，使用標準 GPU 支援。 (${CUDA_CHECK_IMAGE})"
+        else
+            # 模式 B: 手動映射模式
+            echo "⚠️  標準 GPU 模式失敗，嘗試啟用 NVIDIA 手動映射補丁..."
+        fi
+    else
+        # 沒有 --gpus 旗標的 Docker，直接走手動映射
+        echo "⚠️  Docker 不支援 --gpus，嘗試啟用 NVIDIA 手動映射補丁..."
+    fi
+
+    if [ ${#GPU_RUN_ARGS[@]} -eq 0 ]; then
+        # 自動尋找宿主機驅動庫路徑 (處理不同版本的 .so 檔案)
+        LIB_ML=$(find /usr/lib/x86_64-linux-gnu -name "libnvidia-ml.so.1" | head -n 1)
+        LIB_CUDA=$(find /usr/lib/x86_64-linux-gnu -name "libcuda.so.1" | head -n 1)
+
+        if [ -n "${LIB_ML}" ] && [ -n "${LIB_CUDA}" ]; then
+            GPU_RUN_ARGS=(
+                --device /dev/nvidia0:/dev/nvidia0
+                --device /dev/nvidiactl:/dev/nvidiactl
+                --device /dev/nvidia-uvm:/dev/nvidia-uvm
+                --device /dev/nvidia-uvm-tools:/dev/nvidia-uvm-tools
+                --device /dev/nvidia-modeset:/dev/nvidia-modeset
+                -v /usr/bin/nvidia-smi:/usr/bin/nvidia-smi
+                -v "${LIB_ML}:${LIB_ML}"
+                -v "${LIB_CUDA}:${LIB_CUDA}"
+            )
+            echo "✅ NVIDIA 手動映射補丁已載入。"
+        else
+            echo "❌ 找不到 NVIDIA 驅動庫，將以無 GPU 模式啟動。"
+        fi
+    fi
+
+    if [ ${#GPU_RUN_ARGS[@]} -gt 0 ]; then
+        GPU_ENV_ARGS=(
             -e NVIDIA_VISIBLE_DEVICES=all
             -e NVIDIA_DRIVER_CAPABILITIES=all
         )
-        echo "✅ 手動映射補丁已載入 。"
-    else
-        echo "❌ 找不到宿主機驅動庫，將以無 GPU 模式啟動。"
     fi
+elif [ "${GPU_VENDOR}" = "amd" ]; then
+    echo "✅ 偵測到 AMD GPU，啟用 /dev/kfd 與 /dev/dri 裝置映射。"
+
+    if [ -e /dev/kfd ]; then
+        GPU_RUN_ARGS+=(--device /dev/kfd:/dev/kfd)
+    fi
+
+    if [ -d /dev/dri ]; then
+        GPU_RUN_ARGS+=(--device /dev/dri:/dev/dri)
+    fi
+
+    # 部分映像會使用這些變數來控制可見 GPU
+    GPU_ENV_ARGS=(
+        -e HIP_VISIBLE_DEVICES=all
+        -e AMD_VISIBLE_DEVICES=all
+    )
+else
+    echo "ℹ️  未偵測到可用 NVIDIA/AMD GPU，將以 CPU 模式啟動。"
 fi
 
 # Define Docker run options, mirroring your zsh function
@@ -122,8 +170,7 @@ DOCKER_RUN_OPTS=(
     -e GIT_CONFIG_COUNT=1
     -e GIT_CONFIG_KEY_0=safe.directory
     -e GIT_CONFIG_VALUE_0='*'
-    -e NVIDIA_VISIBLE_DEVICES=all
-    -e NVIDIA_DRIVER_CAPABILITIES=all
+    "${GPU_ENV_ARGS[@]}"
     -v /tmp/.X11-unix:/tmp/.X11-unix:rw
     -v "$(pwd):${CONTAINER_WS}"
     -v "$(pwd):/root/corgi_ws"
@@ -273,11 +320,13 @@ EOF
             source ~/.aliases.sh;
             echo '✅ Custom aliases loaded.';
         fi
-        cd ${CONTAINER_WS};
+        cd ${CONTAINER_WS}/corgi_ros2_ws;
         ${INNER_COMMAND};
     \"
 "
 
 # Revoke X server access after the container closes
 echo "Container stopped. Revoking container access to X server..."
-xhost -local:docker > /dev/null
+if [ -n "${DISPLAY}" ] && command -v xhost > /dev/null 2>&1; then
+    xhost -local:docker > /dev/null
+fi

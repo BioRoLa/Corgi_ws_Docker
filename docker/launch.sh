@@ -11,7 +11,16 @@ TAG="latest"
 
 # Get the current user's name for naming the container
 USER_NAME=$(whoami)
+HOST_UID=$(id -u)
+HOST_GID=$(id -g)
+CONTAINER_USER="${USER_NAME}"
+CONTAINER_HOME="/home/${CONTAINER_USER}"
+CONTAINER_WS="${CONTAINER_HOME}/corgi_ws"
 IMAGE_NAME="starlee0514/corgi_ros2_pack_and_go"
+HOST_DISPLAY="${DISPLAY:-}"
+HOST_WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-}"
+HOST_XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-}"
+CONTAINER_XDG_RUNTIME_DIR=""
 
 # Define the container name using the user's name
 CONTAINER_NAME="corgi_dev_${USER_NAME}"
@@ -27,11 +36,11 @@ xhost +local:docker > /dev/null
 # Check if a container with the same name is already running
 if [ "$(docker ps -q -f name=^/${CONTAINER_NAME}$)" ]; then
     echo "⚠️  Container '${CONTAINER_NAME}' is already running. Joining..."
-    xhost -local:docker > /dev/null
     if [ $# -gt 0 ]; then
-        docker exec -it "${CONTAINER_NAME}" zsh -c "exec \"$@\""
+        docker exec -it --user "${CONTAINER_USER}" "${CONTAINER_NAME}" zsh -c "cd ${CONTAINER_WS} && exec \"$@\"" || \
+        docker exec -it "${CONTAINER_NAME}" zsh -c "cd ${CONTAINER_WS} && exec \"$@\""
     else
-        docker exec -it "${CONTAINER_NAME}" zsh
+        docker exec -it --user "${CONTAINER_USER}" "${CONTAINER_NAME}" zsh || docker exec -it "${CONTAINER_NAME}" zsh
     fi
     exit 0
 fi
@@ -66,7 +75,7 @@ else
     echo "⚠️  Docker 不支援 --gpus，嘗試啟用「手動映射」補丁..."
 fi
 
-if [ -z "${GPU_RUN_ARGS}" ]; then
+if [ ${#GPU_RUN_ARGS[@]} -eq 0 ]; then
     
     # 自動尋找宿主機驅動庫路徑 (處理不同版本的 .so 檔案)
     LIB_ML=$(find /usr/lib/x86_64-linux-gnu -name "libnvidia-ml.so.1" | head -n 1)
@@ -97,9 +106,18 @@ DOCKER_RUN_OPTS=(
     --name "${CONTAINER_NAME}"
     --privileged
     --net=host
+    -w "${CONTAINER_WS}"
     ${GPU_RUN_ARGS[@]}  # 這裡會根據環境動態填入參數
     -e DISPLAY=$DISPLAY
+    -e XAUTHORITY=${CONTAINER_HOME}/.Xauthority
+    -e LANG=C.UTF-8
+    -e LC_ALL=C.UTF-8
+    -e HOME=${CONTAINER_HOME}
     -e ROS_DOMAIN_ID=${ROS_DOMAIN_ID}  # ROS_DOMAIN_ID for DDS communication
+    -e USER=${CONTAINER_USER}
+    -e USERNAME=${CONTAINER_USER}
+    -e SHELL=/bin/zsh
+    -e ZSH_DISABLE_COMPFIX=true
     -e TERM=xterm-256color
     -e GIT_CONFIG_COUNT=1
     -e GIT_CONFIG_KEY_0=safe.directory
@@ -107,28 +125,53 @@ DOCKER_RUN_OPTS=(
     -e NVIDIA_VISIBLE_DEVICES=all
     -e NVIDIA_DRIVER_CAPABILITIES=all
     -v /tmp/.X11-unix:/tmp/.X11-unix:rw
+    -v "$(pwd):${CONTAINER_WS}"
     -v "$(pwd):/root/corgi_ws"
 )
+
+if [ -f "$HOME/.Xauthority" ]; then
+    DOCKER_RUN_OPTS+=(-v "$HOME/.Xauthority:${CONTAINER_HOME}/.Xauthority:ro")
+fi
+
+if [ -n "${HOST_WAYLAND_DISPLAY}" ] && [ -n "${HOST_XDG_RUNTIME_DIR}" ] && [ -S "${HOST_XDG_RUNTIME_DIR}/${HOST_WAYLAND_DISPLAY}" ]; then
+    echo "🖥️  Wayland session detected. Mounting runtime socket..."
+    CONTAINER_XDG_RUNTIME_DIR="/tmp/xdg-runtime"
+    DOCKER_RUN_OPTS+=(
+        -e WAYLAND_DISPLAY=${HOST_WAYLAND_DISPLAY}
+        -e XDG_RUNTIME_DIR=${CONTAINER_XDG_RUNTIME_DIR}
+        -v "${HOST_XDG_RUNTIME_DIR}:/tmp/xdg-runtime"
+    )
+fi
+
+# Reuse host zsh config for familiar shell experience
+if [ -f "$HOME/.zshrc" ]; then
+    echo "🐚 Host .zshrc found. Mounting into container..."
+    DOCKER_RUN_OPTS+=(-v "$HOME/.zshrc:${CONTAINER_HOME}/.zshrc:ro")
+fi
+
+if [ -d "$HOME/.oh-my-zsh" ]; then
+    echo "🐚 Host .oh-my-zsh found. Mounting into container..."
+    DOCKER_RUN_OPTS+=(-v "$HOME/.oh-my-zsh:${CONTAINER_HOME}/.oh-my-zsh:ro")
+fi
 
 # Check if host has custom aliases.sh in same directory as this script and mount it to override container's default
 if [ -f "${SCRIPT_DIR}/aliases.sh" ]; then
     echo "📝 Custom aliases.sh found in $(dirname ${SCRIPT_DIR}). Mounting to override container's default..."
-    DOCKER_RUN_OPTS+=(-v "${SCRIPT_DIR}/aliases.sh:/root/.aliases.sh")
+    DOCKER_RUN_OPTS+=(
+        -v "${SCRIPT_DIR}/aliases.sh:${CONTAINER_HOME}/.aliases.sh:ro"
+        -v "${SCRIPT_DIR}/aliases.sh:/root/.aliases.sh:ro"
+    )
 fi
 
 # Check if host has SSH keys and mount them read-only
 if [ -d "$HOME/.ssh" ] && [ -f "$HOME/.ssh/id_ed25519" -o -f "$HOME/.ssh/id_rsa" ]; then
     echo "🔑 SSH keys found in host. Mounting ~/.ssh into container (read-only)..."
-    DOCKER_RUN_OPTS+=(-v "$HOME/.ssh:/root/.ssh:ro")
+    DOCKER_RUN_OPTS+=(-v "$HOME/.ssh:${CONTAINER_HOME}/.ssh:ro")
 fi
 
 echo "🚀 Launching container: ${IMAGE_NAME}:${TAG} as '${CONTAINER_NAME}'"
 echo "Host directories mounted:"
-echo "  - $(pwd) -> /root/corgi_ws"
-
-# Get host user and group ID for the chown trap to fix file permissions on exit
-HOST_UID=$(id -u)
-HOST_GID=$(id -g)
+echo "  - $(pwd) -> ${CONTAINER_WS}"
 
 # The command that will be run inside the container's zsh shell
 # It sets a trap to run chown on exit, sources the ROS environment,
@@ -142,67 +185,97 @@ else
 fi
 
 docker run "${DOCKER_RUN_OPTS[@]}" "${IMAGE_NAME}:${TAG}" zsh -c "
-    trap 'echo \"Fixing permissions...\"; chown -R ${HOST_UID}:${HOST_GID} /root/corgi_ws' EXIT;
-    
-    # Configure Git safe directory to avoid ownership issues
-    if [ -w /root/.gitconfig ] || [ ! -e /root/.gitconfig ]; then
-        git config --global --add safe.directory \"*\"
-    else
-        echo \"⚠️  /root/.gitconfig is read-only. Skipping git config update.\"
+    if ! id -u ${CONTAINER_USER} > /dev/null 2>&1; then
+        if getent group ${HOST_GID} > /dev/null 2>&1; then
+            EXISTING_GROUP=\$(getent group ${HOST_GID} | cut -d: -f1)
+        else
+            EXISTING_GROUP='${CONTAINER_USER}'
+            groupadd -g ${HOST_GID} \"\${EXISTING_GROUP}\"
+        fi
+        useradd -u ${HOST_UID} -g ${HOST_GID} -s /bin/zsh -d ${CONTAINER_HOME} ${CONTAINER_USER}
+    fi
+
+    mkdir -p ${CONTAINER_HOME}
+    chown ${HOST_UID}:${HOST_GID} ${CONTAINER_HOME} 2>/dev/null || true
+
+    if command -v zsh > /dev/null 2>&1; then
+        usermod -s /bin/zsh root 2>/dev/null || true
+        usermod -s /bin/zsh ${CONTAINER_USER} 2>/dev/null || true
+
+        if [ -f /etc/zsh/zshrc ] && ! grep -q "aliases.sh" /etc/zsh/zshrc; then
+            printf '\n[ -f ~/.aliases.sh ] && source ~/.aliases.sh\n' >> /etc/zsh/zshrc
+        fi
+    fi
+
+    if [ ! -f ${CONTAINER_HOME}/.zshrc ]; then
+        cat > ${CONTAINER_HOME}/.zshrc <<EOF
+export HOME=${CONTAINER_HOME}
+export USER=${CONTAINER_USER}
+export TERM=xterm-256color
+
+[ -f ~/.aliases.sh ] && source ~/.aliases.sh
+EOF
+        chown ${HOST_UID}:${HOST_GID} ${CONTAINER_HOME}/.zshrc 2>/dev/null || true
     fi
 
     # Ensure local git identity is set (use global if available)
-    if [ -d /root/corgi_ws/.git ]; then
-        if ! git -C /root/corgi_ws config user.name > /dev/null; then
-            GIT_USER_NAME=$(git config --global --get user.name)
-            if [ -n \"${GIT_USER_NAME}\" ]; then
-                git -C /root/corgi_ws config user.name \"${GIT_USER_NAME}\"
+    if [ -d ${CONTAINER_WS}/.git ]; then
+        if ! git -C ${CONTAINER_WS} config user.name > /dev/null; then
+            GIT_USER_NAME=\$(git config --global --get user.name)
+            if [ -n \"\${GIT_USER_NAME}\" ]; then
+                git -C ${CONTAINER_WS} config user.name \"\${GIT_USER_NAME}\"
             fi
         fi
-        if ! git -C /root/corgi_ws config user.email > /dev/null; then
-            GIT_USER_EMAIL=$(git config --global --get user.email)
-            if [ -n \"${GIT_USER_EMAIL}\" ]; then
-                git -C /root/corgi_ws config user.email \"${GIT_USER_EMAIL}\"
+        if ! git -C ${CONTAINER_WS} config user.email > /dev/null; then
+            GIT_USER_EMAIL=\$(git config --global --get user.email)
+            if [ -n \"\${GIT_USER_EMAIL}\" ]; then
+                git -C ${CONTAINER_WS} config user.email \"\${GIT_USER_EMAIL}\"
             fi
         fi
     fi
 
     # Compile and install grpc_core (Required for corgi_ros2_ws)
-    if [ -d /root/corgi_ws/grpc_core ]; then
+    if [ -d ${CONTAINER_WS}/grpc_core ]; then
         echo \"🔧 Compiling and installing grpc_core...\"
-        # Create build directory if it doesn't exist
-        mkdir -p /root/corgi_ws/grpc_core/build
-        cd /root/corgi_ws/grpc_core/build
-        
-        # Configure, build, and install
-        # Redirect stdout to /dev/null to reduce noise, keep stderr
-        cmake .. -DCMAKE_INSTALL_PREFIX=/opt/corgi/install > /dev/null
-        make -j$(nproc) > /dev/null
-        make install > /dev/null
-        ldconfig
-        echo \"✅ grpc_core installed to /opt/corgi/install\"
-        cd /root/corgi_ws/corgi_ros2_ws
-    else
-        echo \"⚠️  Warning: grpc_core directory not found at /root/corgi_ws/grpc_core\"
-    fi
+        GRPC_BUILD_DIR=${CONTAINER_WS}/grpc_core/build_docker
+        mkdir -p \"\${GRPC_BUILD_DIR}\"
 
-    source /opt/ros/humble/setup.zsh;
-    
-    # 自動檢查並 Source 工作區環境
-    if [ -f /root/corgi_ws/corgi_ros2_ws/install/setup.zsh ]; then
-        source /root/corgi_ws/corgi_ros2_ws/install/setup.zsh;
-        echo '✅ Corgi ROS 2 workspace sourced.';
+        if cmake -S ${CONTAINER_WS}/grpc_core -B \"\${GRPC_BUILD_DIR}\" -DCMAKE_INSTALL_PREFIX=/opt/corgi/install > /dev/null \
+            && cmake --build \"\${GRPC_BUILD_DIR}\" -j\$(nproc) > /dev/null \
+            && cmake --install \"\${GRPC_BUILD_DIR}\" > /dev/null; then
+            ldconfig
+            echo \"✅ grpc_core installed to /opt/corgi/install\"
+        else
+            echo \"❌ grpc_core build/install failed. Please check the error output above.\"
+        fi
+        cd ${CONTAINER_WS}/corgi_ros2_ws
     else
-        echo '⚠️ Warning: Workspace not built yet. Run colcon build first.';
+        echo \"⚠️  Warning: grpc_core directory not found at ${CONTAINER_WS}/grpc_core\"
     fi
     
-    # Load custom aliases if available
-    if [ -f ~/.aliases.sh ]; then
-        source ~/.aliases.sh;
-        echo '✅ Custom aliases loaded.';
-    fi
-    
-    ${INNER_COMMAND};
+    su - ${CONTAINER_USER} -s /bin/zsh -c \"
+        export DISPLAY='${HOST_DISPLAY}';
+        export XAUTHORITY='${CONTAINER_HOME}/.Xauthority';
+        export WAYLAND_DISPLAY='${HOST_WAYLAND_DISPLAY}';
+        export XDG_RUNTIME_DIR='${CONTAINER_XDG_RUNTIME_DIR}';
+        export ZSH_DISABLE_COMPFIX='true';
+        export LANG='C.UTF-8';
+        export LC_ALL='C.UTF-8';
+        export QT_QPA_PLATFORM='\${QT_QPA_PLATFORM:-wayland;xcb}';
+        source /opt/ros/humble/setup.zsh;
+        if [ -f ${CONTAINER_WS}/corgi_ros2_ws/install/setup.zsh ]; then
+            source ${CONTAINER_WS}/corgi_ros2_ws/install/setup.zsh;
+            echo '✅ Corgi ROS 2 workspace sourced.';
+        else
+            echo '⚠️ Warning: Workspace not built yet. Run colcon build first.';
+        fi
+        if [ -f ~/.aliases.sh ]; then
+            source ~/.aliases.sh;
+            echo '✅ Custom aliases loaded.';
+        fi
+        cd ${CONTAINER_WS};
+        ${INNER_COMMAND};
+    \"
 "
 
 # Revoke X server access after the container closes

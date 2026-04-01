@@ -179,7 +179,7 @@ DOCKER_RUN_OPTS=(
     "${GPU_ENV_ARGS[@]}"
     -v /tmp/.X11-unix:/tmp/.X11-unix:rw
     -v "$(pwd):${CONTAINER_WS}"
-    -v "$(pwd):/root/corgi_ws"
+    # -v "$(pwd):/root/corgi_ws"
 )
 
 if [ -f "$HOME/.Xauthority" ]; then

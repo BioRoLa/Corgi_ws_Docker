@@ -33,9 +33,11 @@ RUN apt-get update && apt-get install -y \
     cmake \
     git \
     wget \
+    curl \
     zsh \
     python3-pip \
     python3-colcon-common-extensions \
+    software-properties-common \
     # GUI 與顯示相關
     mesa-utils \
     libpci-dev \
@@ -61,10 +63,30 @@ RUN apt-get update && apt-get install -y \
     # 清理 apt 快取
     && rm -rf /var/lib/apt/lists/*
 
+# 加入 Kisak PPA 升級 AMD/Mesa 驅動支援較新的 GPU (如 RDNA3)
+RUN add-apt-repository -y ppa:kisak/kisak-mesa \
+    && apt-get update && apt-get install -y \
+    mesa-vulkan-drivers \
+    libgl1-mesa-dri \
+    libegl-mesa0 \
+    libglx-mesa0 \
+    libgbm1 \
+    mesa-utils-extra \
+    && rm -rf /var/lib/apt/lists/*
+
 # 安裝 Oh My Zsh
 RUN sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended \
     && git clone https://github.com/zsh-users/zsh-autosuggestions ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-autosuggestions \
-    && git clone https://github.com/zsh-users/zsh-syntax-highlighting.git ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting
+    && git clone https://github.com/zsh-users/zsh-syntax-highlighting.git ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting \
+    && sed -i 's/ZSH_THEME="robbyrussell"/ZSH_THEME="agnoster"/g' ~/.zshrc
+
+# 下載 Nerd Fonts (MesloLGS NF) 以便 agnoster theme / yazi 圖示正常顯示
+RUN mkdir -p /usr/local/share/fonts \
+    && wget -q -P /usr/local/share/fonts https://github.com/romkatv/powerlevel10k-media/raw/master/MesloLGS%20NF%20Regular.ttf \
+    && wget -q -P /usr/local/share/fonts https://github.com/romkatv/powerlevel10k-media/raw/master/MesloLGS%20NF%20Bold.ttf \
+    && wget -q -P /usr/local/share/fonts https://github.com/romkatv/powerlevel10k-media/raw/master/MesloLGS%20NF%20Italic.ttf \
+    && wget -q -P /usr/local/share/fonts https://github.com/romkatv/powerlevel10k-media/raw/master/MesloLGS%20NF%20Bold%20Italic.ttf \
+    && fc-cache -fv
 
 # ===================================================================
 # 安裝 C++ 核心依賴
@@ -157,6 +179,7 @@ RUN apt-get update && apt-get install -y \
     python3-rosdep \
     python3-vcstool \
     python3-osrf-pycommon \
+    python3-argcomplete \
     # Additional development tools
     clang-format \
     clang-tools \
@@ -180,8 +203,32 @@ RUN apt-get update && apt-get install -y \
     iputils-ping \
     vim \
     nano \
+    # yazi 相關依賴
+    ffmpeg \
+    p7zip-full \
+    poppler-utils \
+    fd-find \
+    ripgrep \
+    fzf \
+    zoxide \
+    imagemagick \
     && rm -rf /var/lib/apt/lists/*
-    
+
+# 安裝 lazygit
+RUN LAZYGIT_VERSION=$(curl -s "https://api.github.com/repos/jesseduffield/lazygit/releases/latest" | grep -Po '"tag_name": "v\K[^"]*') \
+    && curl -Lo lazygit.tar.gz "https://github.com/jesseduffield/lazygit/releases/latest/download/lazygit_${LAZYGIT_VERSION}_Linux_x86_64.tar.gz" \
+    && tar xf lazygit.tar.gz lazygit \
+    && install lazygit /usr/local/bin \
+    && rm lazygit.tar.gz lazygit
+
+# 安裝 yazi
+RUN YAZI_VERSION=$(curl -s "https://api.github.com/repos/sxyazi/yazi/releases/latest" | grep -Po '"tag_name": "v\K[^"]*') \
+    && curl -Lo yazi.zip "https://github.com/sxyazi/yazi/releases/latest/download/yazi-x86_64-unknown-linux-gnu.zip" \
+    && unzip yazi.zip \
+    && install yazi-x86_64-unknown-linux-gnu/yazi /usr/local/bin \
+    && install yazi-x86_64-unknown-linux-gnu/ya /usr/local/bin \
+    && rm -rf yazi.zip yazi-x86_64-unknown-linux-gnu
+
 # ===================================================================
 # 配置 Zsh 環境與最終設定
 # ===================================================================
@@ -198,8 +245,14 @@ RUN sed -i 's/plugins=(git)/plugins=(git zsh-autosuggestions zsh-syntax-highligh
 
 # 配置 ROS、環境變數與路徑
 RUN echo "\n# ROS & Corgi Environment" >> ~/.zshrc \
+    && echo "autoload -Uz compinit && compinit" >> ~/.zshrc \
+    && echo "autoload -U +X bashcompinit && bashcompinit" >> ~/.zshrc \
     && echo "source /opt/ros/humble/setup.zsh" >> ~/.zshrc \
-    && echo "source ${CORGI_WS}/corgi_ros2_ws/install/setup.zsh" >> ~/.zshrc \
+    && echo "source /usr/share/colcon_argcomplete/hook/colcon-argcomplete.zsh 2>/dev/null || true" >> ~/.zshrc \
+    && echo "eval \"\$(register-python-argcomplete3 ros2)\" 2>/dev/null || true" >> ~/.zshrc \
+    && echo "eval \"\$(register-python-argcomplete3 colcon)\" 2>/dev/null || true" >> ~/.zshrc \
+    && echo "source ${CORGI_WS}/corgi_ros2_ws/install/setup.zsh 2>/dev/null || true" >> ~/.zshrc \
+    && echo "alias cclean='colcon clean --base-select build install log'" >> ~/.zshrc \
     && echo "\n# Dependent Libraries Path" >> ~/.zshrc \
     && echo "export WEBOTS_HOME=/usr/local/webots" >> ~/.zshrc \
     && echo "export LD_LIBRARY_PATH=${INSTALL_PATH}/lib:${INSTALL_PATH}/lib64:\$LD_LIBRARY_PATH" >> ~/.zshrc \

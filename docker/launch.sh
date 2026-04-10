@@ -126,6 +126,12 @@ if [ "${GPU_VENDOR}" = "nvidia" ]; then
         GPU_ENV_ARGS=(
             -e NVIDIA_VISIBLE_DEVICES=all
             -e NVIDIA_DRIVER_CAPABILITIES=all
+            # NVIDIA PRIME Render Offload (必要於 Intel iGPU + NVIDIA dGPU 雙顯卡)
+            # 確保 OpenGL/GLX 走 NVIDIA 而非 Mesa llvmpipe (CPU 軟體渲染)
+            -e __GLX_VENDOR_LIBRARY_NAME=nvidia
+            -e __NV_PRIME_RENDER_OFFLOAD=1
+            -e __VK_LAYER_NV_optimus=NVIDIA_only
+            -e LIBGL_ALWAYS_INDIRECT=0
         )
     fi
 elif [ "${GPU_VENDOR}" = "amd" ]; then
@@ -245,6 +251,13 @@ docker run "${DOCKER_RUN_OPTS[@]}" "${IMAGE_NAME}:${TAG}" zsh -c "
     mkdir -p ${CONTAINER_HOME}
     chown ${HOST_UID}:${HOST_GID} ${CONTAINER_HOME} 2>/dev/null || true
 
+    # Fix NVIDIA device permissions for non-root users
+    # /dev/nvidia* default to 660 root:root, non-root users cannot access GPU
+    if ls /dev/nvidia* > /dev/null 2>&1; then
+        chmod 666 /dev/nvidia* 2>/dev/null || true
+        chmod 666 /dev/nvidia-caps/* 2>/dev/null || true
+    fi
+
     if command -v zsh > /dev/null 2>&1; then
         usermod -s /bin/zsh root 2>/dev/null || true
         usermod -s /bin/zsh ${CONTAINER_USER} 2>/dev/null || true
@@ -309,6 +322,12 @@ EOF
         export LANG='C.UTF-8';
         export LC_ALL='C.UTF-8';
         export QT_QPA_PLATFORM='\${QT_QPA_PLATFORM:-wayland;xcb}';
+        export NVIDIA_VISIBLE_DEVICES='\${NVIDIA_VISIBLE_DEVICES:-all}';
+        export NVIDIA_DRIVER_CAPABILITIES='\${NVIDIA_DRIVER_CAPABILITIES:-all}';
+        export __GLX_VENDOR_LIBRARY_NAME='\${__GLX_VENDOR_LIBRARY_NAME:-nvidia}';
+        export __NV_PRIME_RENDER_OFFLOAD='\${__NV_PRIME_RENDER_OFFLOAD:-1}';
+        export __VK_LAYER_NV_optimus='\${__VK_LAYER_NV_optimus:-NVIDIA_only}';
+        export LIBGL_ALWAYS_INDIRECT='\${LIBGL_ALWAYS_INDIRECT:-0}';
         source /opt/ros/humble/setup.zsh;
         if [ -f ${CONTAINER_WS}/corgi_ros2_ws/install/setup.zsh ]; then
             source ${CONTAINER_WS}/corgi_ros2_ws/install/setup.zsh;

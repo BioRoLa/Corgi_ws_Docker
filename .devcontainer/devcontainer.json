@@ -1,7 +1,7 @@
 {
     "name": "Corgi ROS 2 Development (Pack & Go)",
     "image": "starlee0514/corgi_ros2_pack_and_go:latest",
-    // 啟動參數：對齊你的 launch.sh，包含 GPU 與 X11 支援
+    // 啟動參數：對齊 launch.sh，包含 GPU 與 X11 支援
     "runArgs": [
         "--gpus=all",
         "--net=host",
@@ -36,29 +36,56 @@
             "source": "${localEnv:HOME}/.gitconfig",
             "target": "/root/.gitconfig",
             "type": "bind"
+        },
+        // 5. 掛載 SSH 金鑰 (唯讀)，對齊 launch.sh。當 ~/.ssh 不存在時 VS Code 會忽略
+        {
+            "source": "${localEnv:HOME}/.ssh",
+            "target": "/root/.ssh",
+            "type": "bind",
+            "readonly": true
         }
     ],
     // 環境變數設定
     "containerEnv": {
+        // 顯示輸出
         "DISPLAY": "${localEnv:DISPLAY}",
         "XAUTHORITY": "/root/.Xauthority",
+        // 編碼 / 區域設定（對齊 launch.sh）
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "TERM": "xterm-256color",
+        // ROS_DOMAIN_ID — devcontainer 預設使用 0，避免與 launch.sh（UID%230）的容器起衝突
+        // 若需自訂請修改為與 launch.sh 相同的公式
+        "ROS_DOMAIN_ID": "0",
+        // NVIDIA GPU — 核心 flags
         "NVIDIA_VISIBLE_DEVICES": "all",
         "NVIDIA_DRIVER_CAPABILITIES": "all",
+        // NVIDIA PRIME Render Offload（Intel iGPU + NVIDIA dGPU 雙顯卡必要）
+        // 沒有這些變數 OpenGL 會走 Intel/Mesa → llvmpipe（CPU 軟體渲染）
         "__GLX_VENDOR_LIBRARY_NAME": "nvidia",
         "__NV_PRIME_RENDER_OFFLOAD": "1",
         "__VK_LAYER_NV_optimus": "NVIDIA_only",
+        "LIBGL_ALWAYS_INDIRECT": "0",
+        // Qt 顯示設定
+        // QT_QPA_PLATFORM 使用 xcb（容器內無 Wayland）
+        "QT_QPA_PLATFORM": "xcb",
+        "QT_X11_NO_MITSHM": "1",
+        // 注意：移除 QT_XCB_GL_INTEGRATION，部分版本會強迫 Qt 用 EGL（而非 GLX）
+        //       在 NVIDIA PRIME 環境下會繞過 __GLX_VENDOR_LIBRARY_NAME 的設定
+        // 注意：移除 QT_DEBUG_PLUGINS，避免每次開終端都倒出大量 plugin debug 資訊
+        // Webots 相關
+        "WEBOTS_HOME": "/usr/local/webots",
+        // Git safe.directory（對齊 launch.sh）
         "GIT_CONFIG_COUNT": "1",
         "GIT_CONFIG_KEY_0": "safe.directory",
-        "GIT_CONFIG_VALUE_0": "*",
-        "QT_QPA_PLATFORM": "xcb",
-        "QT_DEBUG_PLUGINS": "1",
-        "QT_X11_NO_MITSHM": "1",
-        "LIBGL_ALWAYS_INDIRECT": "0",
-        "QT_GRAPHICSSYSTEM": "native",
-        "QT_XCB_GL_INTEGRATION": "xcb_egl"
+        "GIT_CONFIG_VALUE_0": "*"
     },
-    // 只執行編譯，不執行會失敗的 git config
-    "postCreateCommand": "git config --system --add safe.directory '*' && cd /root/corgi_ws/grpc_core && mkdir -p build && cd build && cmake .. -DCMAKE_INSTALL_PREFIX=/opt/corgi/install && make -j$(nproc) && make install && ldconfig",
+    // postCreateCommand：
+    //   1. 設定 git safe.directory
+    //   2. 修正 /dev/nvidia* 權限（避免 Webots 無法存取 GPU）
+    //   3. 編譯安裝 grpc_core 到 /opt/corgi/install
+    //   4. 更新 ldconfig 索引
+    "postCreateCommand": "git config --system --add safe.directory '*' && chmod 666 /dev/nvidia* /dev/nvidia-caps/* 2>/dev/null || true && cd /root/corgi_ws/grpc_core && mkdir -p build && cd build && cmake .. -DCMAKE_INSTALL_PREFIX=/opt/corgi/install -DCMAKE_BUILD_TYPE=Release > /dev/null && make -j$(nproc) > /dev/null && make install > /dev/null && ldconfig && echo '\\n✅ grpc_core installed. Run: source /root/corgi_ws/corgi_ros2_ws/install/setup.zsh'",
     "customizations": {
         "vscode": {
             "settings": {

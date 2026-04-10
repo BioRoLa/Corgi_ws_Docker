@@ -1,0 +1,21 @@
+{
+  "timestamp": "20260410_002910",
+  "gpu_opengl_ok": true,
+  "csv_file": "input_reference_Trot_Vx0.20_Vy0.00_Wz0.00_H0.28_S0.030_P1.0.csv",
+  "speed_readings": 0,
+  "speed_min": null,
+  "speed_max": null,
+  "speed_avg": null,
+  "speed_final": null,
+  "speed_used": null,
+  "threshold": 0.1,
+  "test_pass": false,
+  "verdict": "❌ FAIL — Webots controller produced no speed data",
+  "raw_output": [],
+  "environment": {
+    "DISPLAY": ":14.0",
+    "__GLX_VENDOR_LIBRARY_NAME": "nvidia",
+    "__NV_PRIME_RENDER_OFFLOAD": "1",
+    "NVIDIA_DRIVER_CAPABILITIES": "all"
+  }
+}

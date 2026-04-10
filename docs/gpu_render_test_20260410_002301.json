@@ -1,0 +1,29 @@
+{
+  "timestamp": "20260410_002301",
+  "gpu_opengl_ok": true,
+  "csv_file": "input_reference_Trot_Vx0.20_Vy0.00_Wz0.00_H0.28_S0.030_P1.0.csv",
+  "speed_readings": 7,
+  "speed_min": 0.1668,
+  "speed_max": 0.1882,
+  "speed_avg": 0.17944,
+  "speed_final": 0.1875,
+  "speed_used": 0.1875,
+  "threshold": 0.1,
+  "test_pass": true,
+  "verdict": "✅ PASS — 0.188x  (above threshold 0.1x)",
+  "raw_output": [
+    "speed=0.1746x t_sim=0.88s",
+    "speed=0.1668x t_sim=1.67s",
+    "speed=0.1705x t_sim=2.56s",
+    "speed=0.1823x t_sim=3.66s",
+    "speed=0.1882x t_sim=4.72s",
+    "speed=0.1862x t_sim=5.60s",
+    "speed=0.1875x t_sim=6.57s"
+  ],
+  "environment": {
+    "DISPLAY": ":14.0",
+    "__GLX_VENDOR_LIBRARY_NAME": "nvidia",
+    "__NV_PRIME_RENDER_OFFLOAD": "1",
+    "NVIDIA_DRIVER_CAPABILITIES": "all"
+  }
+}

@@ -1,5 +1,18 @@
 # Corgi ROS 2 Project (Docker Pack & Go)
 
+> ⚠️ **NOTICE: REPOSITORY MOVED** ⚠️
+> 
+> This repository has been made public and moved to a new remote. 
+> If you are using an existing clone, please run the following commands to rename your current remote to `private_repo_archive` and switch `origin` to the new public repository:
+> 
+> ```bash
+> git remote rename origin private_repo_archive
+> git remote add origin git@github.com:BioRoLa/Corgi_ws_Docker.git
+> git fetch origin
+> git checkout main
+> git branch -u origin/main main
+> ```
+
 This repository provides the development environment and source code for the Corgi quadruped robot, based on **ROS 2 Humble**. It uses **Docker** and **Git Submodules** to keep environments consistent across platforms (PC, Jetson Orin).
 
 ## 📂 Repository Structure

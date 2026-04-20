@@ -10,10 +10,14 @@
 
 **問題**：`CorgiRobotABAD.proto` 為 95MB / 227萬行，Webots R2025a 載入時 Segfault。  
 **暫時方案**：使用 `CorgiRobotABAD_IFS.proto`（882KB）替代。  
+
+> **決策（2026-04-10）**：維持 inline IndexedFaceSet，不轉為外部 Mesh URL。  
+> 原因：實體檔案內嵌比外部呼叫更快，且碰撞計算較簡單。
+
 **長期方案**：
 
 - [ ] 調查 Webots R2025a 的 PROTO 大小限制（或 parser bug）
-- [ ] 將 STL 幾何重新轉換為 Mesh URL 形式（外部 `.obj` 或 `.dae` 檔），取代 inline IndexedFaceSet
+- [x] ~~將 STL 幾何重新轉換為 Mesh URL 形式（外部 `.obj` 或 `.dae` 檔），取代 inline IndexedFaceSet~~ → **已決定不改**
 - [ ] 或升級至更新版 Webots（若後續版本修復此問題）
 - [ ] 確認 `CorgiRobotABAD_IFS.proto` 的物理/碰撞精度是否足夠用於正式實驗
 
@@ -39,35 +43,17 @@
 
 ## 🟡 中優先度
 
-### 3. AMD 顯卡（ROCm / OpenCL）相容性
+### 3. AMD 顯卡（ROCm / OpenCL）相容性 — ⛔ 已放棄支援
 
-**現狀**：`docker/launch.sh` 已有 AMD GPU 偵測邏輯（`/dev/kfd` + `/dev/dri`），但未完整測試。
+> **決策（2026-04-10）**：已確認 AMD 顯卡版本過新，Docker Ubuntu 22.04 + Mesa 最新版本仍無法支援，**暫停此項目**。
 
-**待確認事項**：
+**現狀**：`docker/launch.sh` 保留 AMD GPU 偵測邏輯（`/dev/kfd` + `/dev/dri`），但不再積極維護。
 
-- [ ] **ROCm 版本相容性**：確認容器內的 ROCm/HIP 版本與宿主機 AMD driver 是否匹配
-- [ ] **Mesa RADV vs AMDVLK**：Webots 的 OpenGL/Vulkan 路徑對 AMD 卡是否需要額外設定
-  - Mesa RADV（open source）：通常隨系統自動偵測，無需額外 env vars
-  - AMDVLK（官方 Vulkan）：需要 `export VK_ICD_FILENAMES=/etc/vulkan/icd.d/amd_icd64.json`
-- [ ] **`/dev/dri` 權限**：AMD 的 `/dev/dri/renderD*` 預設為 `660 render:render`，  
-  非 render group 的使用者需要 `--device /dev/dri --group-add render` 或 `chmod 666`
-- [ ] **RDNA3 / RX 7000 系列**：Dockerfile 已加入 Kisak Mesa PPA，  
-  確認 Webots 在 RDNA3 下的 OpenGL 4.x 支援（Mesa 23.x 需要確認）
-- [ ] **實際測試**：在一台 AMD 顯卡機器上驗證 `docker/launch.sh` → `webots --sysinfo` 輸出
-
-**AMD 需要加入 `launch.sh` 的可能 env vars**（未驗證）：
-
-```bash
-# AMD GPU OpenGL (目前 launch.sh 的 AMD 分支)
-GPU_ENV_ARGS=(
-    -e HIP_VISIBLE_DEVICES=all
-    -e AMD_VISIBLE_DEVICES=all
-    # 可能需要（待確認）：
-    # -e MESA_LOADER_DRIVER_OVERRIDE=radeonsi    # 強制使用 radeonsi driver
-    # -e VK_ICD_FILENAMES=/etc/vulkan/...        # Vulkan ICD
-    # -e DRI_PRIME=1                             # 類似 NVIDIA PRIME，針對混合 GPU
-)
-```
+- [x] ~~ROCm 版本相容性調查~~ → **顯卡版本過新，放棄**
+- [x] ~~Mesa RADV vs AMDVLK 設定~~ → **Ubuntu 22.04 Mesa 最新版不支援**
+- [x] ~~`/dev/dri` 權限設定~~ → **已放棄**
+- [x] ~~RDNA3 / RX 7000 系列驗證~~ → **已放棄**
+- [x] ~~實際測試~~ → **已放棄**
 
 **參考**：`docker/launch.sh` §AMD 偵測區塊（約 150 行）
 
@@ -83,11 +69,14 @@ GPU_ENV_ARGS=(
 
 ---
 
-### 5. CorgiRobotABAD 原始 Proto 來源追蹤
+### 5. CorgiRobotABAD 原始 Proto 來源追蹤 — ⛔ 已放棄
 
-- [ ] 找到原始 STL 檔案（或 URDF/SDF 來源）
-- [ ] 重新以 Webots R2025a 的格式標準匯入（使用 Mesh URL 而非 inline IFS）
-- [ ] 建立自動化的 PROTO 更新流程（避免手動 95MB 檔案）
+> **決策（2026-04-10）**：維持 inline IndexedFaceSet，不重新匯入或建立自動化流程。  
+> 原因：實體檔案內嵌比外部呼叫更快，且碰撞計算較簡單。
+
+- [ ] 找到原始 STL 檔案（或 URDF/SDF 來源）（保留供參考）
+- [x] ~~重新以 Webots R2025a 的格式標準匯入（使用 Mesh URL 而非 inline IFS）~~ → **已決定不改**
+- [x] ~~建立自動化的 PROTO 更新流程~~ → **已決定不改**
 
 ---
 

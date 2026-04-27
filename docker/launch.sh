@@ -29,6 +29,11 @@ export ROS_DOMAIN_ID=$(( $(id -u) % 230 ))
 
 echo "👤 User: ${USER_NAME} | 🆔 ROS_DOMAIN_ID: ${ROS_DOMAIN_ID}"
 
+DOCKER_TTY_ARGS=()
+if [ -t 0 ] && [ -t 1 ]; then
+    DOCKER_TTY_ARGS=(-it)
+fi
+
 # Preflight: ensure current user can talk to Docker daemon before any side effects.
 if ! docker info > /dev/null 2>&1; then
     echo "❌ Cannot access Docker daemon (permission denied or daemon not running)."
@@ -48,16 +53,21 @@ if [ -n "${DISPLAY}" ] && command -v xhost > /dev/null 2>&1; then
     xhost +local:docker > /dev/null
 fi
 
-# Check if a container with the same name is already running
-if [ "$(docker ps -q -f name=^/${CONTAINER_NAME}$)" ]; then
-    echo "⚠️  Container '${CONTAINER_NAME}' is already running. Joining..."
-    if [ $# -gt 0 ]; then
-        docker exec -it --user "${CONTAINER_USER}" "${CONTAINER_NAME}" zsh -c "cd ${CONTAINER_WS} && exec \"$@\"" || \
-        docker exec -it "${CONTAINER_NAME}" zsh -c "cd ${CONTAINER_WS} && exec \"$@\""
+# Check if a container with the same name is already existing
+if [ "$(docker ps -aq -f name=^/${CONTAINER_NAME}$)" ]; then
+    if [ "$(docker ps -q -f name=^/${CONTAINER_NAME}$)" ]; then
+        echo "⚠️  Container '${CONTAINER_NAME}' is already running. Joining..."
+        if [ $# -gt 0 ]; then
+            docker exec "${DOCKER_TTY_ARGS[@]}" --user "${CONTAINER_USER}" "${CONTAINER_NAME}" zsh -lc 'cd "$1" || exit 1; shift; exec "$@"' zsh "${CONTAINER_WS}" "$@" || \
+            docker exec "${DOCKER_TTY_ARGS[@]}" "${CONTAINER_NAME}" zsh -lc 'cd "$1" || exit 1; shift; exec "$@"' zsh "${CONTAINER_WS}" "$@"
+        else
+            docker exec "${DOCKER_TTY_ARGS[@]}" --user "${CONTAINER_USER}" "${CONTAINER_NAME}" zsh || docker exec "${DOCKER_TTY_ARGS[@]}" "${CONTAINER_NAME}" zsh
+        fi
+        exit 0
     else
-        docker exec -it --user "${CONTAINER_USER}" "${CONTAINER_NAME}" zsh || docker exec -it "${CONTAINER_NAME}" zsh
+        echo "⚠️  Found stopped container '${CONTAINER_NAME}'. Removing it to start a new one..."
+        docker rm "${CONTAINER_NAME}" >/dev/null
     fi
-    exit 0
 fi
 
 # 動態檢測 GPU 支援模式 (NVIDIA / AMD)
@@ -156,30 +166,29 @@ fi
 
 # Define Docker run options, mirroring your zsh function
 DOCKER_RUN_OPTS=(
-    -it --rm
+    "${DOCKER_TTY_ARGS[@]}" --rm
     --name "${CONTAINER_NAME}"
     --privileged
     --net=host
     -w "${CONTAINER_WS}"
-    ${GPU_RUN_ARGS[@]}  # 這裡會根據環境動態填入參數
-    -e DISPLAY=$DISPLAY
-    -e XAUTHORITY=${CONTAINER_HOME}/.Xauthority
-    -e LANG=C.UTF-8
-    -e LC_ALL=C.UTF-8
-    -e HOME=${CONTAINER_HOME}
-    -e ROS_DOMAIN_ID=${ROS_DOMAIN_ID}  # ROS_DOMAIN_ID for DDS communication
-    -e USER=${CONTAINER_USER}
-    -e USERNAME=${CONTAINER_USER}
-    -e SHELL=/bin/zsh
-    -e ZSH_DISABLE_COMPFIX=true
-    -e TERM=xterm-256color
-    -e GIT_CONFIG_COUNT=1
-    -e GIT_CONFIG_KEY_0=safe.directory
-    -e GIT_CONFIG_VALUE_0='*'
+    "${GPU_RUN_ARGS[@]}"
+    -e DISPLAY="${DISPLAY}"
+    -e XAUTHORITY="${CONTAINER_HOME}/.Xauthority"
+    -e LANG="C.UTF-8"
+    -e LC_ALL="C.UTF-8"
+    -e HOME="${CONTAINER_HOME}"
+    -e ROS_DOMAIN_ID="${ROS_DOMAIN_ID}"
+    -e USER="${CONTAINER_USER}"
+    -e USERNAME="${CONTAINER_USER}"
+    -e SHELL="/bin/zsh"
+    -e ZSH_DISABLE_COMPFIX="true"
+    -e TERM="xterm-256color"
+    -e GIT_CONFIG_COUNT="1"
+    -e GIT_CONFIG_KEY_0="safe.directory"
+    -e GIT_CONFIG_VALUE_0="*"
     "${GPU_ENV_ARGS[@]}"
     -v /tmp/.X11-unix:/tmp/.X11-unix:rw
     -v "$(pwd):${CONTAINER_WS}"
-    # -v "$(pwd):/root/corgi_ws"
 )
 
 if [ -f "$HOME/.Xauthority" ]; then
@@ -190,8 +199,8 @@ if [ -n "${HOST_WAYLAND_DISPLAY}" ] && [ -n "${HOST_XDG_RUNTIME_DIR}" ] && [ -S 
     echo "🖥️  Wayland session detected. Mounting runtime socket..."
     CONTAINER_XDG_RUNTIME_DIR="/tmp/xdg-runtime"
     DOCKER_RUN_OPTS+=(
-        -e WAYLAND_DISPLAY=${HOST_WAYLAND_DISPLAY}
-        -e XDG_RUNTIME_DIR=${CONTAINER_XDG_RUNTIME_DIR}
+        -e WAYLAND_DISPLAY="${HOST_WAYLAND_DISPLAY}"
+        -e XDG_RUNTIME_DIR="${CONTAINER_XDG_RUNTIME_DIR}"
         -v "${HOST_XDG_RUNTIME_DIR}:/tmp/xdg-runtime"
     )
 fi
@@ -209,10 +218,19 @@ fi
 
 # Check if host has custom aliases.sh in same directory as this script and mount it to override container's default
 if [ -f "${SCRIPT_DIR}/aliases.sh" ]; then
-    echo "📝 Custom aliases.sh found in $(dirname ${SCRIPT_DIR}). Mounting to override container's default..."
+    echo "📝 Custom aliases.sh found in $(dirname "${SCRIPT_DIR}"). Mounting to override container's default..."
     DOCKER_RUN_OPTS+=(
         -v "${SCRIPT_DIR}/aliases.sh:${CONTAINER_HOME}/.aliases.sh:ro"
         -v "${SCRIPT_DIR}/aliases.sh:/root/.aliases.sh:ro"
+    )
+fi
+
+# Optional local aliases override (ignored by git)
+if [ -f "${SCRIPT_DIR}/aliases.local.sh" ]; then
+    echo "📝 Local aliases.local.sh found. Mounting personal aliases override..."
+    DOCKER_RUN_OPTS+=(
+        -v "${SCRIPT_DIR}/aliases.local.sh:${CONTAINER_HOME}/.aliases.local.sh:ro"
+        -v "${SCRIPT_DIR}/aliases.local.sh:/root/.aliases.local.sh:ro"
     )
 fi
 
@@ -222,127 +240,27 @@ if [ -d "$HOME/.ssh" ] && [ -f "$HOME/.ssh/id_ed25519" -o -f "$HOME/.ssh/id_rsa"
     DOCKER_RUN_OPTS+=(-v "$HOME/.ssh:${CONTAINER_HOME}/.ssh:ro")
 fi
 
+# Mount container bootstrap script to avoid nested-quote issues
+DOCKER_RUN_OPTS+=(-v "${SCRIPT_DIR}/container-entrypoint.sh:/tmp/container-entrypoint.sh:ro")
+
+if ! bash -n "${SCRIPT_DIR}/container-entrypoint.sh"; then
+    echo "❌ Syntax check failed: ${SCRIPT_DIR}/container-entrypoint.sh"
+    exit 2
+fi
+
 echo "🚀 Launching container: ${IMAGE_NAME}:${TAG} as '${CONTAINER_NAME}'"
 echo "Host directories mounted:"
 echo "  - $(pwd) -> ${CONTAINER_WS}"
 
-# The command that will be run inside the container's zsh shell
-# It sets a trap to run chown on exit, sources the ROS environment,
-# and then either executes the user's command (if provided) or starts a new zsh shell.
-if [ $# -gt 0 ]; then
-    # If arguments are passed, prepare a command string
-    INNER_COMMAND="exec \"$@\""
-else
-    # Otherwise, the command is to start a new interactive zsh shell
-    INNER_COMMAND="zsh"
-fi
-
-docker run "${DOCKER_RUN_OPTS[@]}" "${IMAGE_NAME}:${TAG}" zsh -c "
-    if ! id -u ${CONTAINER_USER} > /dev/null 2>&1; then
-        if getent group ${HOST_GID} > /dev/null 2>&1; then
-            EXISTING_GROUP=\$(getent group ${HOST_GID} | cut -d: -f1)
-        else
-            EXISTING_GROUP='${CONTAINER_USER}'
-            groupadd -g ${HOST_GID} \"\${EXISTING_GROUP}\"
-        fi
-        useradd -u ${HOST_UID} -g ${HOST_GID} -s /bin/zsh -d ${CONTAINER_HOME} ${CONTAINER_USER}
-    fi
-
-    mkdir -p ${CONTAINER_HOME}
-    chown ${HOST_UID}:${HOST_GID} ${CONTAINER_HOME} 2>/dev/null || true
-
-    # Fix NVIDIA device permissions for non-root users
-    # /dev/nvidia* default to 660 root:root, non-root users cannot access GPU
-    if ls /dev/nvidia* > /dev/null 2>&1; then
-        chmod 666 /dev/nvidia* 2>/dev/null || true
-        chmod 666 /dev/nvidia-caps/* 2>/dev/null || true
-    fi
-
-    if command -v zsh > /dev/null 2>&1; then
-        usermod -s /bin/zsh root 2>/dev/null || true
-        usermod -s /bin/zsh ${CONTAINER_USER} 2>/dev/null || true
-
-        if [ -f /etc/zsh/zshrc ] && ! grep -q "aliases.sh" /etc/zsh/zshrc; then
-            printf '\n[ -f ~/.aliases.sh ] && source ~/.aliases.sh\n' >> /etc/zsh/zshrc
-        fi
-    fi
-
-    if [ ! -f ${CONTAINER_HOME}/.zshrc ]; then
-        cat > ${CONTAINER_HOME}/.zshrc <<EOF
-export HOME=${CONTAINER_HOME}
-export USER=${CONTAINER_USER}
-export TERM=xterm-256color
-
-[ -f ~/.aliases.sh ] && source ~/.aliases.sh
-EOF
-        chown ${HOST_UID}:${HOST_GID} ${CONTAINER_HOME}/.zshrc 2>/dev/null || true
-    fi
-
-    # Ensure local git identity is set (use global if available)
-    if [ -d ${CONTAINER_WS}/.git ]; then
-        if ! git -C ${CONTAINER_WS} config user.name > /dev/null; then
-            GIT_USER_NAME=\$(git config --global --get user.name)
-            if [ -n \"\${GIT_USER_NAME}\" ]; then
-                git -C ${CONTAINER_WS} config user.name \"\${GIT_USER_NAME}\"
-            fi
-        fi
-        if ! git -C ${CONTAINER_WS} config user.email > /dev/null; then
-            GIT_USER_EMAIL=\$(git config --global --get user.email)
-            if [ -n \"\${GIT_USER_EMAIL}\" ]; then
-                git -C ${CONTAINER_WS} config user.email \"\${GIT_USER_EMAIL}\"
-            fi
-        fi
-    fi
-
-    # Compile and install grpc_core (Required for corgi_ros2_ws)
-    if [ -d ${CONTAINER_WS}/grpc_core ]; then
-        echo \"🔧 Compiling and installing grpc_core...\"
-        GRPC_BUILD_DIR=${CONTAINER_WS}/grpc_core/build_docker
-        mkdir -p \"\${GRPC_BUILD_DIR}\"
-
-        if cmake -S ${CONTAINER_WS}/grpc_core -B \"\${GRPC_BUILD_DIR}\" -DCMAKE_INSTALL_PREFIX=/opt/corgi/install > /dev/null \
-            && cmake --build \"\${GRPC_BUILD_DIR}\" -j\$(nproc) > /dev/null \
-            && cmake --install \"\${GRPC_BUILD_DIR}\" > /dev/null; then
-            ldconfig
-            echo \"✅ grpc_core installed to /opt/corgi/install\"
-        else
-            echo \"❌ grpc_core build/install failed. Please check the error output above.\"
-        fi
-        cd ${CONTAINER_WS}/corgi_ros2_ws
-    else
-        echo \"⚠️  Warning: grpc_core directory not found at ${CONTAINER_WS}/grpc_core\"
-    fi
-    
-    su - ${CONTAINER_USER} -s /bin/zsh -c \"
-        export DISPLAY='${HOST_DISPLAY}';
-        export XAUTHORITY='${CONTAINER_HOME}/.Xauthority';
-        export WAYLAND_DISPLAY='${HOST_WAYLAND_DISPLAY}';
-        export XDG_RUNTIME_DIR='${CONTAINER_XDG_RUNTIME_DIR}';
-        export ZSH_DISABLE_COMPFIX='true';
-        export LANG='C.UTF-8';
-        export LC_ALL='C.UTF-8';
-        export QT_QPA_PLATFORM='\${QT_QPA_PLATFORM:-wayland;xcb}';
-        export NVIDIA_VISIBLE_DEVICES='\${NVIDIA_VISIBLE_DEVICES:-all}';
-        export NVIDIA_DRIVER_CAPABILITIES='\${NVIDIA_DRIVER_CAPABILITIES:-all}';
-        export __GLX_VENDOR_LIBRARY_NAME='\${__GLX_VENDOR_LIBRARY_NAME:-nvidia}';
-        export __NV_PRIME_RENDER_OFFLOAD='\${__NV_PRIME_RENDER_OFFLOAD:-1}';
-        export __VK_LAYER_NV_optimus='\${__VK_LAYER_NV_optimus:-NVIDIA_only}';
-        export LIBGL_ALWAYS_INDIRECT='\${LIBGL_ALWAYS_INDIRECT:-0}';
-        source /opt/ros/humble/setup.zsh;
-        if [ -f ${CONTAINER_WS}/corgi_ros2_ws/install/setup.zsh ]; then
-            source ${CONTAINER_WS}/corgi_ros2_ws/install/setup.zsh;
-            echo '✅ Corgi ROS 2 workspace sourced.';
-        else
-            echo '⚠️ Warning: Workspace not built yet. Run colcon build first.';
-        fi
-        if [ -f ~/.aliases.sh ]; then
-            source ~/.aliases.sh;
-            echo '✅ Custom aliases loaded.';
-        fi
-        cd ${CONTAINER_WS}/corgi_ros2_ws;
-        ${INNER_COMMAND};
-    \"
-"
+docker run \
+    "${DOCKER_RUN_OPTS[@]}" \
+    -e HOST_UID="${HOST_UID}" \
+    -e HOST_GID="${HOST_GID}" \
+    -e CONTAINER_USER="${CONTAINER_USER}" \
+    -e CONTAINER_HOME="${CONTAINER_HOME}" \
+    -e CONTAINER_WS="${CONTAINER_WS}" \
+    "${IMAGE_NAME}:${TAG}" \
+    bash /tmp/container-entrypoint.sh "$@"
 
 # Revoke X server access after the container closes
 echo "Container stopped. Revoking container access to X server..."

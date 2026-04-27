@@ -32,6 +32,7 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     cmake \
     git \
+    git-lfs \
     wget \
     curl \
     zsh \
@@ -60,6 +61,8 @@ RUN apt-get update && apt-get install -y \
     ros-humble-joy \
     # 安裝 Python 庫
     && pip install numpy pyqt5 \
+    # 初始化 git-lfs
+    && git lfs install \
     # 清理 apt 快取
     && rm -rf /var/lib/apt/lists/*
 
@@ -223,11 +226,11 @@ RUN LAZYGIT_VERSION=$(curl -s "https://api.github.com/repos/jesseduffield/lazygi
 
 # 安裝 yazi
 RUN YAZI_VERSION=$(curl -s "https://api.github.com/repos/sxyazi/yazi/releases/latest" | grep -Po '"tag_name": "v\K[^"]*') \
-    && curl -Lo yazi.zip "https://github.com/sxyazi/yazi/releases/latest/download/yazi-x86_64-unknown-linux-gnu.zip" \
+    && curl -Lo yazi.zip "https://github.com/sxyazi/yazi/releases/latest/download/yazi-x86_64-unknown-linux-musl.zip" \
     && unzip yazi.zip \
-    && install yazi-x86_64-unknown-linux-gnu/yazi /usr/local/bin \
-    && install yazi-x86_64-unknown-linux-gnu/ya /usr/local/bin \
-    && rm -rf yazi.zip yazi-x86_64-unknown-linux-gnu
+    && install yazi-x86_64-unknown-linux-musl/yazi /usr/local/bin \
+    && install yazi-x86_64-unknown-linux-musl/ya /usr/local/bin \
+    && rm -rf yazi.zip yazi-x86_64-unknown-linux-musl
 
 # ===================================================================
 # 配置 Zsh 環境與最終設定
@@ -241,6 +244,9 @@ RUN sed -i 's/plugins=(git)/plugins=(git zsh-autosuggestions zsh-syntax-highligh
     && echo "\n# Load Custom Aliases" >> ~/.zshrc \
     && echo "if [ -f ~/.aliases.sh ]; then" >> ~/.zshrc \
     && echo "    source ~/.aliases.sh" >> ~/.zshrc \
+    && echo "fi" >> ~/.zshrc \
+    && echo "if [ -f ~/.aliases.local.sh ]; then" >> ~/.zshrc \
+    && echo "    source ~/.aliases.local.sh" >> ~/.zshrc \
     && echo "fi" >> ~/.zshrc
 
 # 配置 ROS、環境變數與路徑
@@ -249,9 +255,9 @@ RUN echo "\n# ROS & Corgi Environment" >> ~/.zshrc \
     && echo "autoload -U +X bashcompinit && bashcompinit" >> ~/.zshrc \
     && echo "source /opt/ros/humble/setup.zsh" >> ~/.zshrc \
     && echo "source /usr/share/colcon_argcomplete/hook/colcon-argcomplete.zsh 2>/dev/null || true" >> ~/.zshrc \
+    && echo "source ${CORGI_WS}/corgi_ros2_ws/install/setup.zsh 2>/dev/null || true" >> ~/.zshrc \
     && echo "eval \"\$(register-python-argcomplete3 ros2)\" 2>/dev/null || true" >> ~/.zshrc \
     && echo "eval \"\$(register-python-argcomplete3 colcon)\" 2>/dev/null || true" >> ~/.zshrc \
-    && echo "source ${CORGI_WS}/corgi_ros2_ws/install/setup.zsh 2>/dev/null || true" >> ~/.zshrc \
     && echo "alias cclean='colcon clean --base-select build install log'" >> ~/.zshrc \
     && echo "\n# Dependent Libraries Path" >> ~/.zshrc \
     && echo "export WEBOTS_HOME=/usr/local/webots" >> ~/.zshrc \

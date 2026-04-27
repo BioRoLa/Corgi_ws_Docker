@@ -1,6 +1,6 @@
 .vscode
 build_log.txt
-docker/aliases.sh
+docker/aliases.local.sh
 
 Inbox/
 

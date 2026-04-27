@@ -34,7 +34,7 @@ corgi_ws (Parent Repo)
 This guide provides two methods to set up the Docker environment:
 
 1. **VS Code Dev Containers** — Automatic setup with full IDE integration
-2. **Manual `launch.sh`** — Terminal-based control with custom configuration (e.g., custom aliases in `./docker/aliases.sh`)
+2. **Manual `launch.sh`** — Terminal-based control with custom configuration (default aliases in `./docker/aliases.sh`, personal overrides in `./docker/aliases.local.sh`)
 
 Both methods pull the image from Docker Hub and can coexist. **Recommended:** Start the container with `launch.sh` and attach from VS Code for flexibility.
 
@@ -177,9 +177,39 @@ git config --global --add safe.directory "*"
 
 ### Aliases & Developer Convenience
 
-- Default aliases are in `docker/aliases.sh` and load automatically.
-- If a host-side `docker/aliases.sh` exists, `launch.sh` will mount it and override the container default.
-- Inside the container, run `show-aliases` to print all available shortcuts.
+There are now two alias layers:
+
+- `docker/aliases.sh`
+  - tracked in git
+  - provides the shared/default aliases that everyone gets after cloning the repo or rebuilding the image
+- `docker/aliases.local.sh`
+  - ignored by git
+  - intended for each developer's personal aliases and overrides
+
+Load order inside the container:
+
+1. shared aliases from `docker/aliases.sh`
+2. personal overrides from `docker/aliases.local.sh` (if present)
+
+This means you can keep a stable team-wide default while still customizing your own shortcuts locally without uploading them.
+
+Example:
+
+```bash
+cp docker/aliases.sh docker/aliases.local.sh
+# then edit docker/aliases.local.sh with your personal aliases
+```
+
+Or create a minimal local-only file:
+
+```bash
+cat > docker/aliases.local.sh <<'EOF'
+alias cws='cd ~/corgi_ws/corgi_ros2_ws'
+alias sb='source ~/corgi_ws/corgi_ros2_ws/install/setup.zsh'
+EOF
+```
+
+When using `launch.sh`, both files are mounted automatically if present. Inside the container, run `show-aliases` to print the shared shortcut list.
 
 ### SSH & Git Config Mounts
 

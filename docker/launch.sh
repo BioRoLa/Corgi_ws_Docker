@@ -170,6 +170,7 @@ DOCKER_RUN_OPTS=(
     --name "${CONTAINER_NAME}"
     --privileged
     --net=host
+    --shm-size=8g
     -w "${CONTAINER_WS}"
     "${GPU_RUN_ARGS[@]}"
     -e DISPLAY="${DISPLAY}"

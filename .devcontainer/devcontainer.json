@@ -6,6 +6,7 @@
         "--gpus=all",
         "--net=host",
         "--privileged",
+        "--shm-size=8g",
         "--name",
         "corgi_dev_${localEnv:USER}"
     ],
